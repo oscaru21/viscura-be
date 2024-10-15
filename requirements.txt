@@ -1,0 +1,8 @@
+fastapi[all]
+tensorflow==2.15.0
+transformers
+faiss-cpu
+Pillow
+numpy
+torch
+torchvision
