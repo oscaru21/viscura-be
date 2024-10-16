@@ -18,6 +18,7 @@ embedding_service = EmbeddingService()
 search_service = SearchService()
 
 embeddings_store = []  # Store the embeddings and their IDs
+metadata_dict = {}  # Store the metadata for each image
 
 IMAGE_DIR = "images"
 
@@ -26,12 +27,16 @@ async def upload_images(files: List[UploadFile] = File(...)):
     image_ids = []
     for file in files:
         image = Image.open(file.file)
-        image_embedding = embedding_service.embed_image(image)
+        image_embedding, norm_factor = embedding_service.embed_image(image)
 
         # Store the embedding and ID
         image_id = len(embeddings_store)  # Simple incremental ID
         embeddings_store.append(image_embedding)
+        # Store the embedding and norm factor in the index
         search_service.repository.index.add(image_embedding.astype(np.float32))
+        metadata={"norm_factor": norm_factor}
+        metadata_dict[image_id] = metadata
+        
         image_ids.append(image_id)
         
         # Save the image with the ID as the name
@@ -46,12 +51,16 @@ async def generate_caption(image_id: int):
         return {"error": "Image ID not found."}
     
     image_embedding = embeddings_store[image_id]
+    norm_factor = metadata_dict[image_id]["norm_factor"]
+    # comment this to show trained model
+    image_embedding = (image_embedding * norm_factor).numpy()
+    
     caption = content_generator.generate_caption(image_embedding)
     return {"caption": caption}
 
 @app.get("/search/")
 async def search_images_by_text(text: str, num_results: int = Query(10, alias="num_results", ge=1)):
-    text_embedding_np = embedding_service.embed_text([text])
+    text_embedding_np, _ = embedding_service.embed_text([text])
     results = search_service.search(text_embedding_np, num_results)
     results_list = [int(item) for item in results[0]]
     return {"similar_images": results_list}

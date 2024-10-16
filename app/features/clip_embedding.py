@@ -11,7 +11,7 @@ class ClipEmbedding(Embedding):
         
         self.embedding_dimension = 512
 
-    def transform(self, X, input_type: str = 'image') -> np.ndarray:
+    def transform(self, X, input_type: str = 'image'):
         if input_type == "image":
             inputs = self.clip_processor(images=X, return_tensors="tf", padding=True)
             outputs = self.clip_model.get_image_features(**inputs)
@@ -21,6 +21,11 @@ class ClipEmbedding(Embedding):
         else:
             raise ValueError("Invalid input_type. Expected 'image' or 'text'.")
 
-        outputs = outputs / tf.norm(outputs, ord='euclidean', axis=-1, keepdims=True) #L2 normalization
-        return outputs.numpy()
+        # outputs = outputs / tf.norm(outputs, ord='euclidean', axis=-1, keepdims=True) #L2 normalization
+        return outputs
+    
+    def normalize(self, embedding: np.ndarray) -> np.ndarray:
+        norm_factor = tf.norm(embedding, ord='euclidean', axis=-1, keepdims=True)
+        embedding = embedding / norm_factor
+        return embedding.numpy(), norm_factor
     

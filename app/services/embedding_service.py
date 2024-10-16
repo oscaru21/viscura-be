@@ -1,12 +1,13 @@
 from app.features.clip_embedding import ClipEmbedding
-import numpy as np
 
 class EmbeddingService:
     def __init__(self):
         self.model = ClipEmbedding()
 
-    def embed_image(self, image) -> np.ndarray:
-        return self.model.transform(image, input_type='image')
+    def embed_image(self, image):
+        embedding = self.model.transform(image, input_type='image')
+        return self.model.normalize(embedding)
     
-    def embed_text(self, text) -> np.ndarray:
-        return self.model.transform(text, input_type='text')
+    def embed_text(self, text):
+        embedding = self.model.transform(text, input_type='text')
+        return self.model.normalize(embedding)

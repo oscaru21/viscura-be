@@ -1,4 +1,5 @@
-from app.features.caption_generation_model import CaptionGenerationModel
+# from app.features.caption_generation_model import CaptionGenerationModel
+from app.features.caption_generation_model_v2 import CaptionGenerationModel
 
 class ContentGenerationService:
     def __init__(self):
