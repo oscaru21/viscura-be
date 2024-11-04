@@ -34,5 +34,12 @@ class PhotosService:
     def update_photo(self, photo_id, photo):
         return self.photos_repository.update_photo(photo_id, photo)
 
-    def delete_photo(self, photo_id):
-        return self.photos_repository.delete_photo(photo_id)
+    def delete_photo(self, event_id, photo_id):
+        db = DatabaseService()
+        db.delete_record("images", {"event_id": event_id, "id": photo_id})
+        db.close()
+        # Delete the image file
+        if not os.path.exists(os.path.join(self.IMAGE_DIR, event_id, f"{photo_id}.png")):
+            return
+        image_path = os.path.join(self.IMAGE_DIR, event_id, f"{photo_id}.png")
+        os.remove(image_path)

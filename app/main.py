@@ -62,6 +62,12 @@ async def upload_images(eventId, files: List[UploadFile] = File(...)):
 
     return {"image_ids": image_ids}
 
+@app.delete("/events/{eventId}/photos")
+async def delete_images(eventId: int, photoIds: List[int]):
+    for photoId in photoIds:
+        photos_service.delete_photo(str(eventId), photoId)
+    return {"message": "Images deleted successfully"}
+
 @app.get("/events/{eventId}/photos/{photoId}/caption")
 async def generate_caption(eventId: int, photoId: int):
     photo_record = photos_service.get_photo(eventId, photoId)

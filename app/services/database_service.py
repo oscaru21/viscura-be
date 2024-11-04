@@ -29,6 +29,11 @@ class DatabaseService:
         else:
             self.cursor.execute(query)
         return self.cursor.fetchall()
+    
+    def delete_record(self, table, conditions):
+        query = f"DELETE FROM {table} WHERE " + ' AND '.join([f"{k}=%s" for k in conditions.keys()])
+        self.cursor.execute(query, list(conditions.values()))
+        self.connection.commit()
 
     def get_similar_records(self, table, vector_column, event_id, query_vector, n):
         query = f"""
