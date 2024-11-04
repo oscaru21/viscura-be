@@ -24,7 +24,19 @@ CREATE TABLE events (
     description TEXT
 );
 
+CREATE TABLE feedbacks (
+    id bigserial PRIMARY KEY, 
+    post_id integer,
+    event_id integer,
+    feedback_status TEXT,
+    feedback_comment TEXT
+);
+
 -- insert sample events some events
 INSERT INTO events (title, description, org_id) VALUES ('Event 1', 'Event 1 description', 1);
 INSERT INTO events (title, description, org_id) VALUES ('Event 2', 'Event 2 description', 1);
 INSERT INTO events (title, description, org_id) VALUES ('Event 3', 'Event 3 description', 1);
+
+INSERT INTO feedbacks (post_id, event_id, feedback_status, feedback_comment) VALUES (7, 7, 'Approved', 'good post, i like the content');
+INSERT INTO feedbacks (post_id, event_id, feedback_status, feedback_comment) VALUES (17, 17, 'Rejected', 'bad post, i dont like the caption');
+INSERT INTO feedbacks (post_id, event_id, feedback_status, feedback_comment) VALUES (27, 27, 'Pending', ' i like the content, but the lack of emojis is a pain in the ass');

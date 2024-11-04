@@ -13,6 +13,7 @@ from app.services.search_service import SearchService
 from app.services.rag_service import RAGService
 from app.services.photos_service import PhotosService
 from app.services.events_service import EventsService
+from app.services.feedback_service import FeedbackService
 
 from pydantic import BaseModel
 
@@ -25,6 +26,7 @@ search_service = SearchService()
 rag_service = RAGService(embedding_service)
 photos_service = PhotosService(embedding_service)
 events_service = EventsService()
+feedback_service = FeedbackService()
 
 IMAGE_DIR = "images"
 
@@ -143,5 +145,10 @@ class Feedback(BaseModel):
 
 @app.post("/events/{event_id}/posts/{post_id}/feedback")
 async def add_feedback(event_id: int, post_id: int, feedback: Feedback):
-    feedback_id = 1
+    feedback_id = feedback_service.add_feedback(event_id, post_id, feedback)
     return {"feedback_id": feedback_id}
+
+@app.get("/events/{event_id}/posts/{post_id}/feedback")
+async def get_feedback(event_id: int, post_id: int):
+    feedback = feedback_service.get_feedback(event_id, post_id)
+    return feedback
