@@ -1,4 +1,3 @@
-import psycopg2
 import json
 from app.services.embedding_service import EmbeddingService
 from app.services.database_service import DatabaseService
