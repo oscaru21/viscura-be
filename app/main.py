@@ -12,6 +12,7 @@ from app.services.embedding_service import EmbeddingService
 from app.services.search_service import SearchService
 from app.services.rag_service import RAGService
 from app.services.photos_service import PhotosService
+from app.services.events_service import EventsService
 
 from pydantic import BaseModel
 
@@ -23,6 +24,7 @@ embedding_service = EmbeddingService()
 search_service = SearchService()
 rag_service = RAGService(embedding_service)
 photos_service = PhotosService(embedding_service)
+events_service = EventsService()
 
 IMAGE_DIR = "images"
 
@@ -89,6 +91,34 @@ async def search_images_by_text(eventId: int, text: str, num_results: int = Quer
     results_list = [int(item) for item in results]
     return {"similar_images": results_list}
 
+## EVENTS ENDPOINTS
+
+class Event(BaseModel):
+    title: str
+    description: str
+    org_id: int
+
+@app.post("/events")
+async def add_event(event: Event):
+    event_id = events_service.add_event(event)
+    return {"event_id": event_id}
+
+@app.get("/events")
+async def get_all_events(org_id: int):
+    events = events_service.get_all_events(org_id)
+    return events
+
+@app.get("/events/{event_id}")
+async def get_event(event_id: int, org_id: int):
+    event = events_service.get_event(org_id, event_id)
+    return event
+
+@app.delete("/events/{event_id}")
+async def delete_event(event_id: int, org_id: int):
+    events_service.delete_event(org_id, event_id)
+    return {"message": "Event deleted successfully"}
+    
+
 class EventContext(BaseModel):
     event_context: str
 
@@ -105,3 +135,13 @@ async def get_event_context(event_id: int, query: str = Query(None), n: int = Qu
     similar_context = rag_service.get_similar_context(event_id, query, n)
     
     return {"similar_context": similar_context}
+
+## FEEDBACK ENDPOINTS
+class Feedback(BaseModel):
+    feedback: str
+    status: str
+
+@app.post("/events/{event_id}/posts/{post_id}/feedback")
+async def add_feedback(event_id: int, post_id: int, feedback: Feedback):
+    feedback_id = 1
+    return {"feedback_id": feedback_id}

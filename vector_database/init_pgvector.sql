@@ -16,3 +16,15 @@ CREATE TABLE images (
     norm float,
     embedding vector(512)
 );
+
+CREATE TABLE events (
+    id bigserial PRIMARY KEY, 
+    org_id integer,
+    title TEXT, 
+    description TEXT
+);
+
+-- insert sample events some events
+INSERT INTO events (title, description, org_id) VALUES ('Event 1', 'Event 1 description', 1);
+INSERT INTO events (title, description, org_id) VALUES ('Event 2', 'Event 2 description', 1);
+INSERT INTO events (title, description, org_id) VALUES ('Event 3', 'Event 3 description', 1);
