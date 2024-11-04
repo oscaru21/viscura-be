@@ -9,6 +9,8 @@ import numpy as np
 from app.services.content_generation_service import ContentGenerationService
 from app.services.embedding_service import EmbeddingService
 from app.services.search_service import SearchService
+from app.services.rag_service import RAGService
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -16,6 +18,7 @@ app = FastAPI()
 content_generator = ContentGenerationService()
 embedding_service = EmbeddingService()
 search_service = SearchService()
+rag_service = RAGService(embedding_service)
 
 embeddings_store = []  # Store the embeddings and their IDs
 metadata_dict = {}  # Store the metadata for each image
@@ -71,3 +74,20 @@ async def serve_image(image_id: int):
     if not os.path.exists(image_path):
         return JSONResponse(status_code=404, content={"error": "Image file not found."})
     return FileResponse(image_path)
+
+class EventContext(BaseModel):
+    event_context: str
+
+@app.post("/events/{event_id}/context")
+async def add_event_context(event_id: int, event_context: EventContext):
+    # Add the context embedding to the vector database
+    rag_service.insert_context(event_id, event_context.event_context)
+    
+    return {"message": "Event context added successfully", "event_id": event_id}
+
+@app.get("/events/{event_id}/context")
+async def get_event_context(event_id: int, query: str = Query(None), n: int = Query(5)):
+    # Get the similar context for the event
+    similar_context = rag_service.get_similar_context(event_id, query, n)
+    
+    return {"similar_context": similar_context}
