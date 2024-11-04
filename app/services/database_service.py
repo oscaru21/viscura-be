@@ -15,9 +15,11 @@ class DatabaseService:
     def insert_record(self, table, data):
         columns = ', '.join(data.keys())
         values = ', '.join(['%s'] * len(data))
-        query = f"INSERT INTO {table} ({columns}) VALUES ({values})"
+        query = f"INSERT INTO {table} ({columns}) VALUES ({values}) RETURNING id"
         self.cursor.execute(query, list(data.values()))
         self.connection.commit()
+        # Return the ID of the inserted record
+        return self.cursor.fetchone()['id']
 
     def read_records(self, table, conditions=None):
         query = f"SELECT * FROM {table}"
@@ -30,7 +32,7 @@ class DatabaseService:
 
     def get_similar_records(self, table, vector_column, event_id, query_vector, n):
         query = f"""
-        SELECT event_id, content, 1 - ({vector_column} <-> %s) AS similarity
+        SELECT *, 1 - ({vector_column} <-> %s) AS similarity
         FROM {table}
         WHERE event_id = %s
         ORDER BY similarity DESC

@@ -9,3 +9,10 @@ CREATE TABLE embeddings (
     content TEXT, 
     embedding vector(512)
 );
+
+CREATE TABLE images (
+    id bigserial PRIMARY KEY, 
+    event_id integer,
+    norm float,
+    embedding vector(512)
+);
