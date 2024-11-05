@@ -11,16 +11,16 @@ class FeedbackService:
         db = DatabaseService()
         feedback_id = db.insert_record("feedbacks", {"event_id": event_id, "post_id": post_id, "feedback_comment": feedback.feedback, "feedback_status": feedback.status})
         db.close()
-        return feedback_id
+        return {"feedback_id": feedback_id, "message": "Feedback added successfully"}
     
-    def update_feedback(self, event_id: int, post_id: int, feedback_id: int, feedback: dict):
-        db = DatabaseService()
-        db.update_feedback(event_id, post_id, feedback_id, feedback)
-        db.close()
-        return {"message": "Feedback updated successfully"}
+    # def update_feedback(self, event_id: int, post_id: int, feedback_id: int, feedback: dict):
+    #     db = DatabaseService()
+    #     db.update_feedback(event_id, post_id, feedback_id, feedback)
+    #     db.close()
+    #     return {"message": "Feedback updated successfully"}
     
     def delete_feedback(self, event_id: int, post_id: int, feedback_id: int):
         db = DatabaseService()
-        db.delete_feedback(event_id, post_id, feedback_id)
+        db.delete_record("feedbacks", {"event_id": event_id, "post_id": event_id, "id": feedback_id})
         db.close()
-        return {"message": "Feedback deleted successfully"}
+        return {"success": True, "message": "Feedback deleted successfully"}

@@ -14,6 +14,7 @@ from app.services.rag_service import RAGService
 from app.services.photos_service import PhotosService
 from app.services.events_service import EventsService
 from app.services.feedback_service import FeedbackService
+from app.services.authorization_service import AuthorizationService
 
 from pydantic import BaseModel
 
@@ -152,3 +153,13 @@ async def add_feedback(event_id: int, post_id: int, feedback: Feedback):
 async def get_feedback(event_id: int, post_id: int):
     feedback = feedback_service.get_feedback(event_id, post_id)
     return feedback
+
+# @app.put("/events/{event_id}/posts/{post_id}/feedback/{feedback_id}")
+# async def update_feedback(event_id: int, post_id: int, feedback_id: int, feedback: Feedback):
+#     feedback_service.update_feedback(event_id, post_id, feedback_id, feedback)
+#     return {"message": "Feedback updated successfully"}
+
+@app.delete("/events/{event_id}/posts/{post_id}/feedback/{feedback_id}")
+async def delete_feedback(event_id: int, post_id: int, feedback_id: int):
+    feedback_service.delete_feedback(event_id, post_id, feedback_id)
+    return {"message": "Feedback deleted successfully"}
