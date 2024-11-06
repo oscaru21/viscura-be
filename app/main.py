@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, Query
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from typing import List
 import os
@@ -14,11 +15,23 @@ from app.services.rag_service import RAGService
 from app.services.photos_service import PhotosService
 from app.services.events_service import EventsService
 from app.services.feedback_service import FeedbackService
-from app.services.authorization_service import AuthorizationService
+# from app.services.authorization_service import AuthorizationService
 
 from pydantic import BaseModel
 
 app = FastAPI()
+
+origins = [
+    "http://localhost:4200"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # define services
 content_generator = ContentGenerationService()
@@ -32,6 +45,11 @@ feedback_service = FeedbackService()
 IMAGE_DIR = "images"
 
 ## PHOTOS ENDPOINTS
+class Photo(BaseModel):
+    id: int
+    name: str
+    url: str
+    resolution: str
 
 @app.get("/events/{eventId}/photos")
 async def serve_image(eventId: int):
@@ -42,7 +60,10 @@ async def serve_image(eventId: int):
     if not os.path.exists(dir):
         return JSONResponse(status_code=404, content={"error": "No images found for the event."})
     images_names = os.listdir(dir)
-    return {"images": images_names}
+    #map the image names to Photo objects
+    print(images_names)
+    images = [{"id": int(name.split('.')[0]), "name": name, "url": f"http://localhost:8000/events/{eventId}/photos/{name}", "resolution": "1920x1080"} for name in images_names]
+    return images
 
 @app.get("/events/{eventId}/photos/{photoName}")
 async def serve_image(eventId: int, photoName: str):
