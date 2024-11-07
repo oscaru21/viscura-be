@@ -21,6 +21,7 @@ CREATE TABLE posts (
     id bigserial PRIMARY KEY,
     event_id INTEGER NOT NULL,
     caption TEXT,
-    image_ids INTEGER[]
+    image_ids INTEGER[],
+    user_id INTEGER
 );
 
