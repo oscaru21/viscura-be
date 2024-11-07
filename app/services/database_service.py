@@ -30,21 +30,6 @@ class DatabaseService:
             self.cursor.execute(query)
         return self.cursor.fetchall()
     
-    def select_record(self, table, conditions=None):
-        """
-        Select records from the database based on conditions
-        :param table: Name of the table
-        :param conditions: Dictionary with column-value pairs for WHERE clause
-        :return: List of records as dictionaries
-        """
-        query = f"SELECT * FROM {table}"
-        if conditions:
-            query += " WHERE " + ' AND '.join([f"{k}=%s" for k in conditions.keys()])
-            self.cursor.execute(query, list(conditions.values()))
-        else:
-            self.cursor.execute(query)
-        return self.cursor.fetchall()
-    
     def update_record(self, table, data, conditions):
         """
         Update records in the database based on conditions
