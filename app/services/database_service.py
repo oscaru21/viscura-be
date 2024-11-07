@@ -12,6 +12,18 @@ class DatabaseService:
         )
         self.cursor = self.connection.cursor(cursor_factory=RealDictCursor)
 
+    def __enter__(self):
+        """
+        Enter method for context manager
+        """
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        Exit method for context manager, it closes the connection
+        """
+        self.close()
+
     def insert_record(self, table, data):
         columns = ', '.join(data.keys())
         values = ', '.join(['%s'] * len(data))
