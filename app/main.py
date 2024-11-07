@@ -1,6 +1,6 @@
-from fastapi import FastAPI, File, UploadFile, Query
+from fastapi import FastAPI, File, UploadFile, Query, HTTPException, Depends
 from PIL import Image
-from typing import List
+from typing import List, Optional
 import os
 import json
 from fastapi.responses import FileResponse, JSONResponse
@@ -12,8 +12,11 @@ from app.services.embedding_service import EmbeddingService
 from app.services.search_service import SearchService
 from app.services.rag_service import RAGService
 from app.services.photos_service import PhotosService
+from app.services.post_service import PostService, PostCreateRequest, PostUpdateRequest
+from app.services.database_service import DatabaseService
 
 from pydantic import BaseModel
+
 
 app = FastAPI()
 
@@ -25,6 +28,16 @@ rag_service = RAGService(embedding_service)
 photos_service = PhotosService(embedding_service)
 
 IMAGE_DIR = "images"
+
+### DEPENDENCIES
+# Dependency to provide a database connection
+def get_database_service():
+    with DatabaseService() as db_service:
+        yield db_service
+
+# Dependency to provide PostService with a DatabaseService instance
+def get_post_service(db: DatabaseService = Depends(get_database_service)):
+    return PostService(db=db)
 
 ## PHOTOS ENDPOINTS
 
@@ -105,3 +118,60 @@ async def get_event_context(event_id: int, query: str = Query(None), n: int = Qu
     similar_context = rag_service.get_similar_context(event_id, query, n)
     
     return {"similar_context": similar_context}
+
+## POSTS ENDPOINTS
+@app.post("/posts", response_model=dict)
+async def create_post(request: PostCreateRequest, post_service: PostService = Depends(get_post_service)):
+    """
+    Endpoint to create a new post.
+    """
+    post_id = post_service.create_post(
+        event_id=request.event_id,
+        caption=request.caption,
+        image_ids=request.image_ids,
+        user_id=request.user_id
+    )
+    return {"post_id": post_id}
+
+@app.get("/posts/{post_id}", response_model=dict)
+async def get_post(post_id: int, post_service: PostService = Depends(get_post_service)):
+    """
+    Endpoint to get a post by its ID.
+    """
+    post = post_service.get_post(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    return post
+
+@app.get("/events/{event_id}/posts", response_model=List[dict])
+async def get_posts_by_event(event_id: int, post_service: PostService = Depends(get_post_service)):
+    """
+    Endpoint to get all posts for a given event.
+    """
+    posts = post_service.get_posts_by_event(event_id)
+    return posts
+
+@app.put("/posts/{post_id}", response_model=dict)
+async def update_post(post_id: int, request: PostUpdateRequest, post_service: PostService = Depends(get_post_service)):
+    """
+    Endpoint to update an existing post.
+    """
+    success = post_service.update_post(
+        post_id=post_id,
+        event_id=request.event_id,
+        caption=request.caption,
+        image_ids=request.image_ids
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail="Post not found or not updated")
+    return {"message": "Post updated successfully"}
+
+@app.delete("/posts/{post_id}", response_model=dict)
+async def delete_post(post_id: int, post_service: PostService = Depends(get_post_service)):
+    """
+    Endpoint to delete a post by its ID.
+    """
+    success = post_service.delete_post(post_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Post not found or not deleted")
+    return {"message": "Post deleted successfully"}
