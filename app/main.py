@@ -58,7 +58,7 @@ async def serve_image(eventId: int):
     """
     dir = os.path.join(IMAGE_DIR, str(eventId))
     if not os.path.exists(dir):
-        return JSONResponse(status_code=404, content={"error": "No images found for the event."})
+        return []
     images_names = os.listdir(dir)
     #map the image names to Photo objects
     print(images_names)
@@ -109,11 +109,11 @@ async def generate_caption(eventId: int, photoId: int):
     return {"caption": caption}
 
 @app.get("/events/{eventId}/photos/search/")
-async def search_images_by_text(eventId: int, text: str, num_results: int = Query(10)):
+async def search_images_by_text(eventId: int, text: str, threshold: float = Query(0.5)):
     text_embedding_np, _ = embedding_service.embed_text([text])
-    results = search_service.search(eventId, text_embedding_np, num_results)
+    results = search_service.search(eventId, text_embedding_np, threshold)
     results_list = [int(item) for item in results]
-    return {"similar_images": results_list}
+    return results_list
 
 ## EVENTS ENDPOINTS
 
