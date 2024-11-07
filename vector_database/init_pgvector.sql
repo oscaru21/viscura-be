@@ -17,6 +17,13 @@ CREATE TABLE images (
     embedding vector(512)
 );
 
+CREATE TABLE posts (
+    id bigserial PRIMARY KEY,
+    event_id INTEGER NOT NULL,
+    caption TEXT,
+    image_ids INTEGER[]
+);
+
 CREATE TABLE events (
     id bigserial PRIMARY KEY, 
     org_id integer,
