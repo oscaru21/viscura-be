@@ -1,9 +1,23 @@
 from typing import List, Optional, Dict, Any
 from app.services.database_service import DatabaseService
+from pydantic import BaseModel
 
+# Post request models
+class PostCreateRequest(BaseModel):
+    event_id: int
+    caption: str
+    image_ids: List[int]
+    user_id: int
+
+class PostUpdateRequest(BaseModel):
+    event_id: Optional[int] = None
+    caption: Optional[str] = None
+    image_ids: Optional[List[int]] = None
+
+# Post service
 class PostService:
-    def __init__ (self):
-        self.db = DatabaseService()
+    def __init__ (self, db: DatabaseService):
+        self.db = db
         self.table = "posts"
 
     def create_post(self, event_id:int, caption:str, image_ids:List[int], user_id:int) -> int:
@@ -21,7 +35,7 @@ class PostService:
             "image_ids": image_ids,
             "user_id": user_id
         }
-        return self.db.insert(self.table, post)
+        return self.db.insert_record(self.table, post)
     
     def get_post(self, post_id:int) -> Optional[Dict[str, Any]]:
         """
@@ -30,7 +44,7 @@ class PostService:
         :return: The post as a dictionary or None if not found
         """
         condition = {"id": post_id}
-        records = self.db.select(self.table, condition)
+        records = self.db.read_records(self.table, condition)
         return records[0] if records else None
     
     def get_posts_by_event(self, event_id:int) -> List[Dict[str, Any]]:
@@ -40,22 +54,21 @@ class PostService:
         :return: A list of posts as dictionaries
         """
         condition = {"event_id": event_id}
-        records = self.db.select(self.table, condition)
+        records = self.db.read_records(self.table, condition)
         return records if records else []
     
-    def update_post(self, post_id:int, event_id:Optional[int]=None, caption:Optional[str]=None, image_ids:Optional[List[int]]=None) -> bool:
+    def update_post(self, post_id: int, event_id: Optional[int] = None, caption: Optional[str] = None, image_ids: Optional[List[int]] = None) -> bool:
         """
         Update a post in the database
         :param post_id: The id of the post to update
-        :param event_id: The new event id for the post (optional)
-        :param caption: The new caption for the post (optional)
-        :param image_ids: The new image ids for the post (optional)
+        :param event_id: The id of the event (optional)
+        :param caption: The caption of the post (optional)
+        :param image_ids: The ids of the images in the post (optional)
         :return: True if the update was successful, False otherwise
         """
-        # Fetch the post to check if it exists
         if not self.get_post(post_id):
             return False
-        # Update only provided fields
+        
         data = {}
         if event_id is not None:
             data["event_id"] = event_id
@@ -63,14 +76,12 @@ class PostService:
             data["caption"] = caption
         if image_ids is not None:
             data["image_ids"] = image_ids
-        
+
         if data:
-            columns = ', '.join([f"{key} = %s" for key in data.keys()])
-            query = f"UPDATE {self.table} SET {columns} WHERE id = %s"
-            self.db_service.cursor.execute(query, list(data.values()) + [post_id])
-            self.db_service.connection.commit()
-            return True
-    
+            conditions = {"id": post_id}
+            rows_updated = self.db.update_record(self.table, data, conditions)
+            return rows_updated > 0
+        
         return False
     
     def delete_post(self, post_id:int) -> bool:
@@ -81,7 +92,7 @@ class PostService:
         """
         if self.get_post(post_id):
             conditions = {"id": post_id}
-            self.db_service.delete_record(self.table, conditions)
+            self.db.delete_record(self.table, conditions)
             return True
         return False   
     
