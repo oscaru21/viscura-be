@@ -5,10 +5,12 @@ from typing import List, Optional
 import os
 import json
 from fastapi.responses import FileResponse, JSONResponse
+from pdfminer.high_level import extract_text
+from docx import Document 
 
 import numpy as np
 
-from app.services.content_generation_service import ContentGenerationService
+from app.services.image_description_service import ImageDescriptionService
 from app.services.embedding_service import EmbeddingService
 from app.services.search_service import SearchService
 from app.services.rag_service import RAGService
@@ -18,6 +20,7 @@ from app.services.feedback_service import FeedbackService
 # from app.services.authorization_service import AuthorizationService
 from app.services.post_service import PostService, PostCreateRequest, PostUpdateRequest
 from app.services.database_service import DatabaseService
+from app.services.upload_service import UploadService
 
 from pydantic import BaseModel
 
@@ -37,15 +40,17 @@ app.add_middleware(
 )
 
 # define services
-content_generator = ContentGenerationService()
+content_generator = ImageDescriptionService()
 embedding_service = EmbeddingService()
 search_service = SearchService()
 rag_service = RAGService(embedding_service)
 photos_service = PhotosService(embedding_service)
 events_service = EventsService()
 feedback_service = FeedbackService()
+upload_service = UploadService(base_upload_dir="uploads", remote_server_url="http://127.0.0.1:8000/upload")
 
-IMAGE_DIR = "images"
+
+IMAGE_DIR = "uploads/images"
 
 ### DEPENDENCIES
 # Dependency to provide a database connection
@@ -71,7 +76,10 @@ async def serve_image(eventId: int):
     """
     dir = os.path.join(IMAGE_DIR, str(eventId))
     if not os.path.exists(dir):
-        return []
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"No images found for event ID {eventId}."}
+        )
     images_names = os.listdir(dir)
     #map the image names to Photo objects
     print(images_names)
@@ -89,17 +97,30 @@ async def serve_image(eventId: int, photoName: str):
     image_path = os.path.join(dir, photoName)
     if not os.path.exists(image_path):
         return JSONResponse(status_code=404, content={"error": "Image not found."})
-    return FileResponse(image_path)
+    return FileResponse(image_path, media_type="image/jpeg", filename=photoName)
 
-@app.post("/events/{eventId}/photos")
-async def upload_images(eventId, files: List[UploadFile] = File(...)):
-    image_ids = []
-    for file in files:
-        image = Image.open(file.file)
-        image_id = photos_service.add_photo(image, eventId)
-        image_ids.append(image_id)
+@app.post("/events/{event_id}/photos")
+async def upload_and_process_photos(
+    event_id: int,
+    files: List[UploadFile] = File(...),
+    use_remote: bool = False
+):
+    try:
+        uploaded_files = upload_service.upload_images(files, event_id, use_remote=use_remote)
+        processed_images = []
 
-    return {"image_ids": image_ids}
+        for file_path in uploaded_files:
+            image = Image.open(file_path)
+            photo_id = photos_service.add_photo(image, event_id)
+            processed_images.append({"photo_id": photo_id, "file_path": file_path})
+
+        return {
+            "event_id": event_id,
+            "message": "Photos uploaded and processed successfully",
+            "processed_images": processed_images,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/events/{eventId}/photos")
 async def delete_images(eventId: int, photoIds: List[int]):
@@ -157,14 +178,32 @@ async def delete_event(event_id: int, org_id: int):
     
 
 class EventContext(BaseModel):
-    event_context: str
+    event_id: int
+    files: List[UploadFile] = File(...)
+    text: Optional[str] = None
 
 @app.post("/events/{event_id}/context")
-async def add_event_context(event_id: int, event_context: EventContext):
-    # Add the context embedding to the vector database
-    rag_service.insert_context(event_id, event_context.event_context)
-    
-    return {"message": "Event context added successfully", "event_id": event_id}
+async def upload_context(
+    event_context: EventContext,
+):
+    """
+    Upload documents or add textual context for an event.
+    """
+    if event_context.files:
+        uploaded_files = upload_service.upload_documents(EventContext.files)
+        # Process uploaded files into context (example: extract text from files)
+        extracted_context = []  # Replace with your extraction logic
+        for file_path in uploaded_files:
+            with open(file_path, "r") as f:
+                extracted_context.append(f.read())
+
+        context = " ".join(extracted_context)
+    else:
+        context = event_context.text
+
+    rag_service.insert_context(event_context.event_id, context)
+    return {"message": "Context added successfully", "event_id": event_context.event_id}
+
 
 @app.get("/events/{event_id}/context")
 async def get_event_context(event_id: int, query: str = Query(None), n: int = Query(5)):
