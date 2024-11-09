@@ -7,3 +7,9 @@ numpy
 torch
 torchvision
 psycopg2-binary
+uvicorn
+langchain
+sentence-transformers
+langchain_community
+pdfminer.six
+python-docx
