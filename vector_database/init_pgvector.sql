@@ -1,13 +1,14 @@
 CREATE EXTENSION IF NOT EXISTS vector;
+DROP TABLE IF EXISTS embeddings;
 /*
 An embedding created with CLIP (Contrastive Language–Image Pretraining) 
 typically has 512 dimensions for both text and image embeddings
 */
-CREATE TABLE embeddings (
+CREATE TABLE contexts (
     id bigserial PRIMARY KEY, 
     event_id integer,
     content TEXT, 
-    embedding vector(512)
+    embedding vector(384)
 );
 
 CREATE TABLE images (
