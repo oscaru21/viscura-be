@@ -1,39 +1,65 @@
 import json
 from app.services.embedding_service import EmbeddingService
 from app.services.database_service import DatabaseService
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 class RAGService:
-    def __init__(self, embedding_service: EmbeddingService, max_length=10):
-        self.max_length = max_length
+    def __init__(self, embedding_service: EmbeddingService, chunk_size=500, chunk_overlap=50):
+        """
+        Initialize RAGService.
+        :param embedding_service: Instance of the EmbeddingService.
+        :param chunk_size: Maximum size of each chunk (default: 500).
+        :param chunk_overlap: Overlap between chunks (default: 50).
+        """
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
         self.embedding_service = embedding_service
-        
-    def insert_context(self, event_id: int, text:str):
-        # divide the text into chunks
+        self.db = DatabaseService()
+
+    def insert_context(self, event_id: int, text: str):
         chunks = self.get_chunks(text)
-        # create the embeddings
         embeddings = [self.embedding_service.embed_text(chunk) for chunk in chunks]
-        # insert the dataframe into postgres db
-        db = DatabaseService()
+
         for chunk, embedding in zip(chunks, embeddings):
-            db.insert_record("embeddings", {"content": chunk, "embedding": json.dumps(embedding[0].tolist()[0]), "event_id": event_id})
-        db.close()
-        
+            self.db.insert_record(
+                "contexts",
+                {
+                    "content": chunk,
+                    "embedding": json.dumps(embedding.tolist()),  # Ensure this is list-serializable
+                    "event_id": event_id,
+                },
+            )
+        self.db.close()
+
+
     def get_similar_context(self, event_id: int, text: str, n=5):
-        # get the embeddings for the text
+        """
+        Retrieves similar context from the database based on embeddings.
+        :param event_id: Event identifier.
+        :param text: Query text to find similar contexts.
+        :param n: Number of similar records to retrieve (default: 5).
+        :return: List of similar context records.
+        """
+        # Create embedding for the query text
         text_embedding, _ = self.embedding_service.embed_text(text)
         text_embedding = json.dumps(text_embedding.tolist()[0])
-        # get the similar records from the database
-        db = DatabaseService()
-        similar_records = db.get_similar_records("embeddings", "embedding", event_id, text_embedding, n)
-
-        db.close()
+        # Retrieve similar records from the database
+        similar_records = self.db.get_similar_records(
+            "contexts", "embedding", event_id, text_embedding, n
+        )
+        self.db.close()
         return similar_records
-        
+
     def get_chunks(self, text: str):
-        # Split the text into chunks
-        # The model has a maximum token limit, so we need to split the text
-        # into smaller chunks if it exceeds the limit
-        words = text.split()
-        text_chunks = [' '.join(words[i:i+self.max_length]) for i in range(0, len(words), self.max_length)]
-        return text_chunks
+        """
+        Splits text into smaller chunks using RecursiveCharacterTextSplitter.
+        :param text: Input text to be chunked.
+        :return: List of text chunks.
+        """
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap
+        )
+        chunks = text_splitter.split_text(text)
+        return chunks
     
