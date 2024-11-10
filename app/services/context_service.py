@@ -2,15 +2,18 @@ import os
 import json
 from typing import List, Optional
 from fastapi import UploadFile
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from app.services.database_service import DatabaseService
 from app.services.embedding_service import EmbeddingService
 from app.services.upload_service import UploadService
 
 class ContextService:
-    def __init__(self, embedding_service: EmbeddingService):
+    def __init__(self, embedding_service: EmbeddingService, chunk_size: int = 500, chunk_overlap: int = 50):
         self.DOCUMENT_DIR = "uploads/documents"
         self.embedding_service = embedding_service
         self.upload_service = UploadService()
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
 
     def add_document(self, event_id: int, file_name: str, file_ext: str) -> int:
         """
@@ -76,11 +79,14 @@ class ContextService:
                 content = f.read()
             self.add_context(event_id, content, "document", doc_id)
 
-    def split_text_into_chunks(self, text: str, chunk_size: int = 512) -> List[str]:
+    def split_text_into_chunks(self, text: str) -> List[str]:
         """
-        Split text into smaller chunks for embedding.
+        Split text into smaller chunks using RecursiveCharacterTextSplitter.
         :param text: Input text.
-        :param chunk_size: Size of each chunk.
         :return: List of text chunks.
         """
-        return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap
+        )
+        return text_splitter.split_text(text)
