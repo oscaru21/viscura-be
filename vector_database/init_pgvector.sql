@@ -20,7 +20,7 @@ CREATE TABLE documents (
     title TEXT,
     file_type TEXT,
     user_id integer
-)
+);
 
 CREATE TABLE images (
     id bigserial PRIMARY KEY, 
