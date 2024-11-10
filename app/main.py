@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Query, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, Query, HTTPException, Depends, Form
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from typing import List, Optional
@@ -21,6 +21,7 @@ from app.services.feedback_service import FeedbackService
 from app.services.post_service import PostService, PostCreateRequest, PostUpdateRequest
 from app.services.database_service import DatabaseService
 from app.services.upload_service import UploadService
+from app.services.context_service import ContextService
 
 from pydantic import BaseModel
 
@@ -48,7 +49,7 @@ photos_service = PhotosService(embedding_service)
 events_service = EventsService()
 feedback_service = FeedbackService()
 upload_service = UploadService(base_upload_dir="uploads", remote_server_url="http://127.0.0.1:8000/upload")
-
+context_service = ContextService(embedding_service)
 
 IMAGE_DIR = "uploads/images"
 
@@ -102,17 +103,29 @@ async def serve_image(eventId: int, photoName: str):
 @app.post("/events/{event_id}/photos")
 async def upload_and_process_photos(
     event_id: int,
-    files: List[UploadFile] = File(...),
-    use_remote: bool = False
+    files: List[UploadFile] = File(...),  # FastAPI expects multipart data as UploadFile
+    use_remote: bool = Form(False)
 ):
     try:
-        uploaded_files = upload_service.upload_images(files, event_id, use_remote=use_remote)
         processed_images = []
+        
+        for upload_file in files:
+            try:
+                # Save the uploaded file to a temporary path
+                temp_file_path = f"temp_{upload_file.filename}"
+                with open(temp_file_path, "wb") as temp_file:
+                    temp_file.write(await upload_file.read())
+                
+                # Process the saved file
+                image = Image.open(temp_file_path)
+                photo_id = photos_service.add_photo(image, event_id)
+                processed_images.append({"photo_id": photo_id, "file_path": temp_file_path})
 
-        for file_path in uploaded_files:
-            image = Image.open(file_path)
-            photo_id = photos_service.add_photo(image, event_id)
-            processed_images.append({"photo_id": photo_id, "file_path": file_path})
+                # Clean up the temporary file
+                os.remove(temp_file_path)
+
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Error processing file {upload_file.filename}: {str(e)}")
 
         return {
             "event_id": event_id,
@@ -120,8 +133,8 @@ async def upload_and_process_photos(
             "processed_images": processed_images,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    
 @app.delete("/events/{eventId}/photos")
 async def delete_images(eventId: int, photoIds: List[int]):
     for photoId in photoIds:
@@ -178,32 +191,30 @@ async def delete_event(event_id: int, org_id: int):
     
 
 class EventContext(BaseModel):
-    event_id: int
     files: List[UploadFile] = File(...)
     text: Optional[str] = None
 
 @app.post("/events/{event_id}/context")
 async def upload_context(
-    event_context: EventContext,
+    event_id: int,
+    files: Optional[List[UploadFile]] = File(None),
+    text: Optional[str] = Form(None)
 ):
     """
     Upload documents or add textual context for an event.
     """
-    if event_context.files:
-        uploaded_files = upload_service.upload_documents(EventContext.files)
-        # Process uploaded files into context (example: extract text from files)
-        extracted_context = []  # Replace with your extraction logic
-        for file_path in uploaded_files:
-            with open(file_path, "r") as f:
-                extracted_context.append(f.read())
+    if files:
+        # Process uploaded documents
+        context_service.process_documents(event_id, files)
 
-        context = " ".join(extracted_context)
+    elif text:
+        # Add text as main context
+        context_service.add_context(event_id, text, "main_context")
+
     else:
-        context = event_context.text
+        raise HTTPException(status_code=400, detail="No files or text provided.")
 
-    rag_service.insert_context(event_context.event_id, context)
-    return {"message": "Context added successfully", "event_id": event_context.event_id}
-
+    return {"message": "Context added successfully", "event_id": event_id}
 
 @app.get("/events/{event_id}/context")
 async def get_event_context(event_id: int, query: str = Query(None), n: int = Query(5)):
