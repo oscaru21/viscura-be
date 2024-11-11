@@ -13,7 +13,6 @@ import numpy as np
 from app.services.image_description_service import ImageDescriptionService
 from app.services.embedding_service import EmbeddingService
 from app.services.search_service import SearchService
-from app.services.rag_service import RAGService
 from app.services.photos_service import PhotosService
 from app.services.events_service import EventsService
 from app.services.feedback_service import FeedbackService
