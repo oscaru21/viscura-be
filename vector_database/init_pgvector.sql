@@ -1,5 +1,12 @@
 CREATE EXTENSION IF NOT EXISTS vector;
-DROP TABLE IF EXISTS embeddings;
+-- Drop tables if they exist
+DROP TABLE IF EXISTS embeddings CASCADE;
+DROP TABLE IF EXISTS contexts CASCADE;
+DROP TABLE IF EXISTS documents CASCADE;
+DROP TABLE IF EXISTS images CASCADE;
+DROP TABLE IF EXISTS posts CASCADE;
+DROP TABLE IF EXISTS events CASCADE;
+DROP TABLE IF EXISTS feedbacks CASCADE;
 /*
 An embedding created with CLIP (Contrastive Language–Image Pretraining) 
 typically has 512 dimensions for both text and image embeddings
