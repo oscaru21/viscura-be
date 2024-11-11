@@ -6,9 +6,9 @@ from app.services.database_service import DatabaseService
 from app.services.upload_service import UploadService
 
 class PhotosService:
-    def __init__(self, embedding_service: EmbeddingService):
+    def __init__(self):
         self.IMAGE_DIR = "uploads/images"
-        self.embedding_service = embedding_service
+        self.embedding_service = EmbeddingService()
         self.upload_service = UploadService()
         
     def get_photo(self, event_id, photo_id):
