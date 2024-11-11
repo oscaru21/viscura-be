@@ -8,9 +8,9 @@ from app.services.embedding_service import EmbeddingService
 from app.services.upload_service import UploadService
 
 class ContextService:
-    def __init__(self, embedding_service: EmbeddingService, chunk_size: int = 500, chunk_overlap: int = 50):
+    def __init__(self, chunk_size: int = 500, chunk_overlap: int = 50):
         self.DOCUMENT_DIR = "uploads/documents"
-        self.embedding_service = embedding_service
+        self.embedding_service = EmbeddingService()
         self.upload_service = UploadService()
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
@@ -90,3 +90,36 @@ class ContextService:
             chunk_overlap=self.chunk_overlap
         )
         return text_splitter.split_text(text)
+    
+    def get_context_by_event_id(self, event_id: int) -> List[dict]:
+        """
+        Retrieve all contexts associated with a specific event ID.
+        :param event_id: ID of the event.
+        """
+        db = DatabaseService()
+        query = "SELECT id, context_type, content FROM contexts WHERE event_id = %s"
+        contexts = db.read_records("contexts", {"event_id": event_id})
+        db.close()
+        return contexts
+
+    def get_context_by_context_id(self, context_id: int) -> Optional[dict]:
+        """
+        Retrieve a specific context by its ID.
+        :param context_id: ID of the context.
+        """
+        db = DatabaseService()
+        context = db.read_records("contexts", {"id": context_id})
+        db.close()
+        return context[0] if context else None
+
+    def get_context_by_context_type(self, event_id: int, context_type: str) -> List[dict]:
+        """
+        Retrieve contexts by type for a specific event.
+        :param event_id: ID of the event.
+        :param context_type: Type of context ('document' or 'main_context').
+        """
+        db = DatabaseService()
+        query = "SELECT id, content FROM contexts WHERE event_id = %s AND context_type = %s"
+        contexts = db.read_records("contexts", {"event_id": event_id, "context_type": context_type})
+        db.close()
+        return contexts
