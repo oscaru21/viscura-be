@@ -13,3 +13,4 @@ sentence-transformers
 langchain_community
 pdfminer.six
 python-docx
+requests
