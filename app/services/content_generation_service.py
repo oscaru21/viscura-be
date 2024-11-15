@@ -90,15 +90,15 @@ class ContentGenerationService:
         :return: Combined relevant context as a string.
         """
         # Create embedding for the user's prompt
-        embedding_result = self.embedding_service.embed_text(user_prompt)
-        print(f"embed_text output: {embedding_result}")
+        embedding_result = self.embedding_service.embed_context(user_prompt)
+        print(f"embed_context output: {embedding_result}")
 
         if isinstance(embedding_result, tuple):
-            text_embedding = embedding_result[0] 
+            context_embedding = embedding_result[0] 
         else:
-            text_embedding = embedding_result
+            context_embedding = embedding_result
 
-        text_embedding = json.dumps(text_embedding.tolist())
+        context_embedding = json.dumps(context_embedding.tolist())
 
         # Retrieve similar records from the database
         db = DatabaseService()
@@ -106,7 +106,7 @@ class ContentGenerationService:
             table="contexts",
             vector_column="embedding",
             event_id=event_id,
-            query_vector=text_embedding
+            query_vector=context_embedding
         )
         db.close()
 
