@@ -214,18 +214,13 @@ async def get_event_context_by_event_id(event_id: int):
     try:
         # Fetch contexts from the database using the event ID
         db = DatabaseService()
-        query = "SELECT id, context_type FROM contexts WHERE event_id = :event_id"
-        result = db.execute_query(query, {"event_id": event_id})
-
-        # Transform the result into a list of dictionaries
-        contexts = [{"id": row["id"], "context_type": row["context_type"]} for row in result]
-
+        contexts = db.read_records("contexts", {"event_id": event_id})
         db.close()
 
         if not contexts:
             raise HTTPException(status_code=404, detail=f"No contexts found for event ID {event_id}")
-
-        return {"event_id": event_id, "contexts": contexts}
+        context_list = [{"id": context["id"], "context_type": context["context_type"]} for context in contexts]
+        return {"event_id": event_id, "contexts": context_list}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving contexts: {str(e)}")
 
