@@ -102,7 +102,7 @@ class ContentGenerationService:
 
         # Retrieve similar records from the database
         db = DatabaseService()
-        similar_records = db.get_similar_records(
+        similar_records = db.get_top_k_similar_records(
             table="contexts",
             vector_column="embedding",
             event_id=event_id,
