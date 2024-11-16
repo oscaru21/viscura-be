@@ -45,7 +45,7 @@ class ContextService:
         """
         db = DatabaseService()
         chunks = self.split_text_into_chunks(text)
-        embeddings = [self.embedding_service.embed_text(chunk) for chunk in chunks]
+        embeddings = [self.embedding_service.embed_context(chunk) for chunk in chunks]
 
         for chunk, embedding in zip(chunks, embeddings):
             db.insert_record(
