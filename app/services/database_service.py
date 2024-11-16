@@ -75,7 +75,7 @@ class DatabaseService:
         self.cursor.execute(query, (query_vector, event_id))
         return self.cursor.fetchall()
     
-    def get_top_k_similar_records(self, table, vector_column, event_id, query_vector, n: int = 5):
+    def get_top_k_similar_records(self, table, vector_column, event_id, query_vector, n: int = 3):
         query = f"""
         SELECT *, 1 - ({vector_column} <=> %s) AS similarity
         FROM {table}
