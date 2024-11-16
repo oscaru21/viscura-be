@@ -197,12 +197,6 @@ async def upload_context(
 
     return {"message": "Context added successfully", "event_id": event_id}
 
-# @app.get("/events/{event_id}/context")
-# async def get_event_context(event_id: int, query: str = Query(None), n: int = Query(5)):
-#     # Get the similar context for the event
-#     similar_context = rag_service.get_similar_context(event_id, query, n)
-    
-#     return {"similar_context": similar_context}
 @app.get("/events/{event_id}/context")
 async def get_event_context_by_event_id(event_id: int):
     """
