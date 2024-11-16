@@ -148,7 +148,7 @@ class ContentGenerationService:
         :param event_id: Event ID for retrieving relevant context.
         :param tone: Tone for the caption. Defaults to "friendly".
         :param max_new_tokens: Maximum length of the generated caption.
-        :return: Generated caption and relevant context.
+        :return: Generated caption, relevant context, and full prompt.
         """
         # Combine image descriptions into a single string
         image_description_text = ", ".join(image_description)
@@ -173,5 +173,7 @@ class ContentGenerationService:
 
         return {
             "caption": caption,
-            "relevant_context": context
+            "relevant_context": context,
+            "full_prompt": formatted_prompt
         }
+
