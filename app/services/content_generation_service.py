@@ -59,22 +59,23 @@ class ContentGenerationService:
             Context:
             {context}
 
-            Instructions:
-            - The caption should be engaging, creative, and suitable for social media.
-            - Use a friendly, enthusiastic, and conversational tone.
-            - Highlight key details and exciting aspects from the context.
-            - Include relevant hashtags and emojis to enhance the post.
-            - Always include 1-2 emojis, do not use more than 3 emojis in a caption.
-
-            Example:
-            User Prompt: "Image description: a silver Tesla. Generate a caption for a photo of the new Tesla Model Z."
-            Caption: "🚀 Experience the future with the all-new Tesla Model Z! With a 500-mile range and autonomous driving, the road ahead just got electrifying! ⚡️ #Tesla #ModelZ #ElectricRevolution"
-
-            User Prompt:
             Image descriptions: 
             {image_description}
+
+            Instructions:
+            - Write a short, engaging caption suitable for social media.
+            - Use a {tone} tone and include at least one emoji.
+            - Highlight key details and exciting aspects from the context.
+            - Avoid repetition and highlight the most exciting aspects.
+
+            Example:
+            Context: "Showcasing Tesla's latest innovations in electric vehicles."
+            Image Description: "A silver Tesla Model S."
+            Caption: "⚡️ Drive the future with Tesla Model S! Sleek, sustainable, and stunning. #Tesla #EVRevolution"
+
+            User Prompt:
             Create an engaging social media post caption. For
-            {user_prompt}, use a {tone} tone.
+            {user_prompt}
 
             Caption:
             """,
@@ -90,29 +91,31 @@ class ContentGenerationService:
         :return: Combined relevant context as a string.
         """
         # Create embedding for the user's prompt
-        embedding_result = self.embedding_service.embed_text(user_prompt)
-        print(f"embed_text output: {embedding_result}")
+        embedding_result = self.embedding_service.embed_context(user_prompt)
+        print(f"embed_context output: {embedding_result}")
 
         if isinstance(embedding_result, tuple):
-            text_embedding = embedding_result[0] 
+            context_embedding = embedding_result[0] 
         else:
-            text_embedding = embedding_result
+            context_embedding = embedding_result
 
-        text_embedding = json.dumps(text_embedding.tolist())
+        context_embedding = json.dumps(context_embedding.tolist())
 
         # Retrieve similar records from the database
         db = DatabaseService()
-        similar_records = db.get_similar_records(
+        similar_records = db.get_top_k_similar_records(
             table="contexts",
             vector_column="embedding",
             event_id=event_id,
-            query_vector=text_embedding
+            query_vector=context_embedding
         )
         db.close()
 
         # Combine the content of the top `n` similar contexts into a single string
+        # Keep only unique contexts
         relevant_contexts = sorted(similar_records, key=lambda x: x["similarity"], reverse=True)[:n]
-        combined_context = "\n\n".join([context["content"] for context in relevant_contexts])
+        unique_contexts = list({context["content"]: context for context in relevant_contexts}.values())
+        combined_context = "\n\n".join([context["content"] for context in unique_contexts])
 
         return combined_context
     
@@ -145,7 +148,7 @@ class ContentGenerationService:
         :param event_id: Event ID for retrieving relevant context.
         :param tone: Tone for the caption. Defaults to "friendly".
         :param max_new_tokens: Maximum length of the generated caption.
-        :return: Generated caption and relevant context.
+        :return: Generated caption, relevant context, and full prompt.
         """
         # Combine image descriptions into a single string
         image_description_text = ", ".join(image_description)
@@ -170,5 +173,7 @@ class ContentGenerationService:
 
         return {
             "caption": caption,
-            "relevant_context": context
+            "relevant_context": context,
+            "full_prompt": formatted_prompt
         }
+

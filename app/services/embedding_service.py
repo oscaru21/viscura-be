@@ -19,7 +19,16 @@ class EmbeddingService:
     
     def embed_text(self, text):
         """
-        Generate an embedding for text and normalize it.
+        Generate an embedding for text queries and normalize it.
+        :param text: Input text string.
+        :return: Normalized text embedding.
+        """
+        embedding = self.img_model.transform(text, input_type='text')
+        return self.model.normalize(embedding)
+    
+    def embed_context(self, text):
+        """
+        Generate an embedding for context and normalize it.
         :param text: Input text string.
         :return: Normalized text embedding as a NumPy array.
         """

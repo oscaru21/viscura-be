@@ -25,7 +25,7 @@ CREATE TABLE documents (
     id bigserial PRIMARY KEY, 
     event_id integer,
     title TEXT,
-    file_type TEXT,
+    file_ext TEXT,
     user_id integer
 );
 
