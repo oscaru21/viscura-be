@@ -67,7 +67,6 @@ class ContentGenerationService:
             - Use a {tone} tone and include at least one emoji.
             - Highlight key details and exciting aspects from the context.
             - Avoid repetition and highlight the most exciting aspects.
-            - Limit the caption to {max_new_tokens} tokens.
 
             Example:
             Context: "Showcasing Tesla's latest innovations in electric vehicles."
