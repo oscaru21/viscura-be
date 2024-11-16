@@ -103,41 +103,33 @@ async def serve_image(eventId: int, photoName: str):
         return JSONResponse(status_code=404, content={"error": "Image not found."})
     return FileResponse(image_path, media_type="image/jpeg", filename=photoName)
 
-@app.post("/events/{event_id}/photos")
-async def upload_and_process_photos(
-    event_id: int,
-    files: List[UploadFile] = File(...),  # FastAPI expects multipart data as UploadFile
-    use_remote: bool = Form(False)
-):
+@app.post("/events/{eventId}/photos")
+async def upload_images(eventId: int, files: List[UploadFile] = File(...)):
+    """
+    Endpoint to upload images for a specific event.
+    """
     try:
-        processed_images = []
-        
-        for upload_file in files:
+        image_ids = []
+        for file in files:
             try:
-                # Save the uploaded file to a temporary path
-                temp_file_path = f"temp_{upload_file.filename}"
-                with open(temp_file_path, "wb") as temp_file:
-                    temp_file.write(await upload_file.read())
-                
-                # Process the saved file
-                image = Image.open(temp_file_path)
-                photo_id = photos_service.add_photo(image, event_id)
-                processed_images.append({"photo_id": photo_id, "file_path": temp_file_path})
-
-                # Clean up the temporary file
-                os.remove(temp_file_path)
-
+                image = Image.open(file.file)
+                image_id = photos_service.add_photo(image, eventId)
+                image_ids.append(image_id)
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error processing file {upload_file.filename}: {str(e)}")
-
-        return {
-            "event_id": event_id,
-            "message": "Photos uploaded and processed successfully",
-            "processed_images": processed_images,
-        }
+                raise HTTPException(
+                    status_code=500, 
+                    detail=f"Error processing file {file.filename}: {str(e)}"
+                )
+        return {"image_ids": image_ids}
+    except HTTPException as http_exc:
+        raise http_exc
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-    
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error uploading images: {str(e)}"
+        )
+
+
 @app.delete("/events/{eventId}/photos")
 async def delete_images(eventId: int, photoIds: List[int]):
     for photoId in photoIds:
