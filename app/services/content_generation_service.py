@@ -111,8 +111,10 @@ class ContentGenerationService:
         db.close()
 
         # Combine the content of the top `n` similar contexts into a single string
+        # Keep only unique contexts
         relevant_contexts = sorted(similar_records, key=lambda x: x["similarity"], reverse=True)[:n]
-        combined_context = "\n\n".join([context["content"] for context in relevant_contexts])
+        unique_contexts = list({context["content"]: context for context in relevant_contexts}.values())
+        combined_context = "\n\n".join([context["content"] for context in unique_contexts])
 
         return combined_context
     
