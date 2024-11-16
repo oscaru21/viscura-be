@@ -59,22 +59,24 @@ class ContentGenerationService:
             Context:
             {context}
 
-            Instructions:
-            - The caption should be engaging, creative, and suitable for social media.
-            - Use a friendly, enthusiastic, and conversational tone.
-            - Highlight key details and exciting aspects from the context.
-            - Include relevant hashtags and emojis to enhance the post.
-            - Always include 1-2 emojis, do not use more than 3 emojis in a caption.
-
-            Example:
-            User Prompt: "Image description: a silver Tesla. Generate a caption for a photo of the new Tesla Model Z."
-            Caption: "🚀 Experience the future with the all-new Tesla Model Z! With a 500-mile range and autonomous driving, the road ahead just got electrifying! ⚡️ #Tesla #ModelZ #ElectricRevolution"
-
-            User Prompt:
             Image descriptions: 
             {image_description}
+
+            Instructions:
+            - Write a short, engaging caption suitable for social media.
+            - Use a {tone} tone and include at least one emoji.
+            - Highlight key details and exciting aspects from the context.
+            - Avoid repetition and highlight the most exciting aspects.
+            - Limit the caption to {max_new_tokens} tokens.
+
+            Example:
+            Context: "Showcasing Tesla's latest innovations in electric vehicles."
+            Image Description: "A silver Tesla Model S."
+            Caption: "⚡️ Drive the future with Tesla Model S! Sleek, sustainable, and stunning. #Tesla #EVRevolution"
+
+            User Prompt:
             Create an engaging social media post caption. For
-            {user_prompt}, use a {tone} tone.
+            {user_prompt}
 
             Caption:
             """,
