@@ -68,10 +68,10 @@ class ContentGenerationService:
             - Highlight key details and exciting aspects from the context.
             - Avoid repetition and highlight the most exciting aspects.
 
-            Example:
-            Context: "Showcasing Tesla's latest innovations in electric vehicles."
-            Image Description: "A silver Tesla Model S."
-            Caption: "⚡️ Drive the future with Tesla Model S! Sleek, sustainable, and stunning. #Tesla #EVRevolution"
+            Example for reference:
+            Context: "Drake's new album is breaking records worldwide."
+            Image Description: "A photo of Drake performing on stage."
+            Caption: "🤩 Drake is back in the Six! @champagnepapi"
 
             User Prompt:
             Create an engaging social media post caption. For
@@ -173,6 +173,7 @@ class ContentGenerationService:
 
         return {
             "caption": caption,
+            "img_description": image_description_text,
             "relevant_context": context,
             "full_prompt": formatted_prompt
         }
