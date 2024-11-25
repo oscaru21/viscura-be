@@ -61,6 +61,12 @@ def get_context(event_id):
     response = requests.get(url)
     return response.json()
 
+def search_images_by_text(event_id, search_text, threshold=0.2):
+    url = f"{BASE_URL}/events/{event_id}/photos/search/"
+    params = {"text": search_text, "threshold": threshold}
+    response = requests.get(url, params=params)
+    return response.json()
+
 def create_post(event_id, caption, image_ids, user_id):
     url = f"{BASE_URL}/posts"
     data = {"event_id": event_id, "caption": caption, "image_ids": image_ids, "user_id": user_id}
@@ -93,6 +99,13 @@ def test_all_endpoints():
             photo_name = photos[0]["name"]
             photo_result = get_photo(event_id, photo_name)
             print("Photo Fetch Result:", photo_result)
+
+        # Test search images by text
+        search_text = input("Enter text to search for images: ")
+        threshold = float(input("Enter threshold (default is 0.5): ") or 0.5)
+        print("Searching images by text...")
+        search_result = search_images_by_text(event_id, search_text, threshold)
+        print("Search Result:", search_result)
 
         # Upload context (text or files)
         context_type = input("Upload context as file or text? [file/text]: ").strip().lower()
