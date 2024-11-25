@@ -1,7 +1,7 @@
 from fastapi import FastAPI, File, UploadFile, Query, HTTPException, Depends, Form
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
-from typing import List, Optional
+from typing import List, Optional, Union
 import os
 import json
 from fastapi.responses import FileResponse, JSONResponse
@@ -178,24 +178,44 @@ class EventContext(BaseModel):
 @app.post("/events/{event_id}/context")
 async def upload_context(
     event_id: int,
-    files: Optional[List[UploadFile]] = File(None),
+    context_type: str = Query(..., description="Type of context to add: 'document' or 'main context'"),
+    files: Optional[Union[List[UploadFile], str]] = File(None),
     text: Optional[str] = Form(None)
 ):
     """
     Upload documents or add textual context for an event.
+    :param event_id: Event ID.
+    :param context_type: Type of context to add. It can be 'document' or 'main context'.
+    :param files: List of files to upload.
+    :param text: Textual context to add.
+    :return: Success message and event ID.
     """
-    if files:
-        # Process uploaded documents
-        context_service.process_documents(event_id, files)
+    try:
+        if isinstance(files, str):
+            files = []
+        if context_type == "document":
+            if not files or not isinstance(files, list):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Files are required for 'document' context type."
+                )
+            context_service.process_documents(event_id, files)
+        elif context_type == "main context":
+            if not text:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Text is required for 'main context' type."
+                )
+            context_service.add_context(event_id, text, "main_context")
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid context_type '{context_type}'. Expected 'document' or 'main context'."
+            )
 
-    elif text:
-        # Add text as main context
-        context_service.add_context(event_id, text, "main_context")
-
-    else:
-        raise HTTPException(status_code=400, detail="No files or text provided.")
-
-    return {"message": "Context added successfully", "event_id": event_id}
+        return {"message": "Context added successfully", "event_id": event_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @app.get("/events/{event_id}/context")
 async def get_event_context_by_event_id(event_id: int):
