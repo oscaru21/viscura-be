@@ -92,6 +92,7 @@ You should see the following output in the command line (or something similar):
 Open the local txt file that has the HF access token saved, copy and paste the access token to the command line.
 Adding token to the git-credential is optional.
 The end result should look something like this to confirm successful login:
+
 ![image](https://github.com/user-attachments/assets/1097c1d5-5d12-4aff-b213-ff6eda45a815)
 
 ## 4. Once the login is successful, run the backend.
