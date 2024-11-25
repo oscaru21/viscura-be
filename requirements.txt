@@ -8,9 +8,9 @@ torch
 torchvision
 psycopg2-binary
 uvicorn
-langchain
-sentence-transformers
-langchain_community
+langchain==0.3.7
+sentence-transformers==3.2.1
+langchain_community==0.3.5
 pdfminer.six
 python-docx
 requests
