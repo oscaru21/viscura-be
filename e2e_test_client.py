@@ -2,7 +2,6 @@ import os
 import requests
 import logging
 from io import BytesIO
-from PIL import Image
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -29,8 +28,6 @@ def upload_photos(event_id, file_paths):
     try:
         response = requests.post(url, files=files)
         return response.json()
-    except Exception as e:
-        return {"error": str(e)}
     finally:
         for _, (_, f, _) in files:
             f.close()
@@ -48,10 +45,11 @@ def generate_caption(post_id, user_prompt, tone="friendly", max_new_tokens=50):
 
 def upload_context(event_id, file_paths=None, text=None):
     url = f"{BASE_URL}/events/{event_id}/context"
+    params = {"context_type": "document" if file_paths else "main context"}
     data = {"text": text} if text else {}
     files = [('files', (os.path.basename(file_path), open(file_path, 'rb'), 'application/octet-stream')) for file_path in file_paths] if file_paths else None
     try:
-        response = requests.post(url, data=data, files=files)
+        response = requests.post(url, params=params, data=data, files=files)
         return response.json()
     finally:
         if files:
