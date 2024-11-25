@@ -24,7 +24,7 @@ class EmbeddingService:
         :return: Normalized text embedding.
         """
         embedding = self.img_model.transform(text, input_type='text')
-        return self.model.normalize(embedding)
+        return self.img_model.normalize(embedding)
     
     def embed_context(self, text):
         """
