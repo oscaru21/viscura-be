@@ -1,15 +1,15 @@
 from langchain.prompts import PromptTemplate
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
 from app.services.context_service import ContextService 
 from app.services.image_description_service import ImageDescriptionService
 from app.services.photos_service import PhotosService
 from app.services.database_service import DatabaseService
 from app.services.embedding_service import EmbeddingService 
 from typing import Optional
-import torch
 import json
 import numpy as np
 from pydantic import BaseModel
+import requests
+import os 
 
 class CaptionRequest(BaseModel):
     user_prompt: str
@@ -36,22 +36,11 @@ class ContentGenerationService:
         self.image_description_service = ImageDescriptionService()
         self.embedding_service = EmbeddingService()
         self.max_length = max_length
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer.pad_token_id = self.tokenizer.eos_token_id  # Set pad_token_id
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
-        # Set up the HuggingFace pipeline
-        self.hf_pipeline = pipeline(
-            'text-generation',
-            model=self.model,
-            tokenizer=self.tokenizer,
-            max_length=self.max_length,
-            temperature=0.6,
-            top_p=0.9,
-            repetition_penalty=1.1,
-            eos_token_id=self.tokenizer.eos_token_id,
-            pad_token_id=self.tokenizer.eos_token_id,
-            device=0 if torch.cuda.is_available() else -1
-        )
+        self.api_token = os.environ.get('HUGGINGFACE_API_TOKEN')
+        self.model_name = model_name
+        self.api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+        self.headers = {"Authorization": f"Bearer {self.api_token}"}
+        
         self.prompt_template = PromptTemplate(
             template="""
             You are a social media assistant. Based on the provided context, create an engaging social media post caption.
@@ -68,13 +57,7 @@ class ContentGenerationService:
             - Highlight key details and exciting aspects from the context.
             - Avoid repetition and highlight the most exciting aspects.
 
-            Example for reference:
-            Context: "Drake's new album is breaking records worldwide."
-            Image Description: "A photo of Drake performing on stage."
-            Caption: "🤩 Drake is back in the Six! @champagnepapi"
-
             User Prompt:
-            Create an engaging social media post caption. For
             {user_prompt}
 
             Caption:
@@ -92,7 +75,6 @@ class ContentGenerationService:
         """
         # Create embedding for the user's prompt
         embedding_result = self.embedding_service.embed_context(user_prompt)
-        print(f"embed_context output: {embedding_result}")
 
         if isinstance(embedding_result, tuple):
             context_embedding = embedding_result[0] 
@@ -164,9 +146,14 @@ class ContentGenerationService:
             tone=tone
         )
 
-        # Generate caption using the HuggingFace pipeline
-        outputs = self.hf_pipeline(formatted_prompt, max_new_tokens=max_new_tokens, num_return_sequences=1, do_sample=True)
-        generated_text = outputs[0]['generated_text']
+        # Generate caption using the Hugging Face Inference API
+        response = requests.post(
+            self.api_url,
+            headers=self.headers,
+            json={"inputs": formatted_prompt, "parameters": {"max_new_tokens": max_new_tokens}}
+        )
+        response.raise_for_status()
+        generated_text = response.json()[0]['generated_text']
 
         # Extract the caption from the generated text
         caption = generated_text[len(formatted_prompt):].strip().split('\n')[0]

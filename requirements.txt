@@ -15,3 +15,4 @@ pdfminer.six
 python-docx
 requests
 huggingface-hub
+python-dotenv
