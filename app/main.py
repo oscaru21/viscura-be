@@ -1,23 +1,27 @@
-from fastapi import FastAPI, File, UploadFile, Query, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, Query, HTTPException, Depends, Form
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
-from typing import List, Optional
+from typing import List, Optional, Union
 import os
 import json
 from fastapi.responses import FileResponse, JSONResponse
+from pdfminer.high_level import extract_text
+from docx import Document 
 
 import numpy as np
 
-from app.services.content_generation_service import ContentGenerationService
+from app.services.image_description_service import ImageDescriptionService
 from app.services.embedding_service import EmbeddingService
 from app.services.search_service import SearchService
-from app.services.rag_service import RAGService
 from app.services.photos_service import PhotosService
 from app.services.events_service import EventsService
 from app.services.feedback_service import FeedbackService
 # from app.services.authorization_service import AuthorizationService
 from app.services.post_service import PostService, PostCreateRequest, PostUpdateRequest
 from app.services.database_service import DatabaseService
+from app.services.upload_service import UploadService
+from app.services.context_service import ContextService
+from app.services.content_generation_service import ContentGenerationService, CaptionRequest        
 
 from pydantic import BaseModel
 
@@ -36,16 +40,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+IMAGE_DIR = "uploads/images"
+MODEL_NAME = 'meta-llama/Llama-3.2-1B'
+
 # define services
-content_generator = ContentGenerationService()
+image_description_service = ImageDescriptionService()
 embedding_service = EmbeddingService()
 search_service = SearchService()
-rag_service = RAGService(embedding_service)
-photos_service = PhotosService(embedding_service)
+photos_service = PhotosService()
 events_service = EventsService()
 feedback_service = FeedbackService()
+upload_service = UploadService(base_upload_dir="uploads", remote_server_url="http://127.0.0.1:8000/upload")
+context_service = ContextService()
+content_generation_service = ContentGenerationService(model_name=MODEL_NAME)
 
-IMAGE_DIR = "images"
+
 
 ### DEPENDENCIES
 # Dependency to provide a database connection
@@ -71,7 +80,10 @@ async def serve_image(eventId: int):
     """
     dir = os.path.join(IMAGE_DIR, str(eventId))
     if not os.path.exists(dir):
-        return []
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"No images found for event ID {eventId}."}
+        )
     images_names = os.listdir(dir)
     #map the image names to Photo objects
     print(images_names)
@@ -89,37 +101,40 @@ async def serve_image(eventId: int, photoName: str):
     image_path = os.path.join(dir, photoName)
     if not os.path.exists(image_path):
         return JSONResponse(status_code=404, content={"error": "Image not found."})
-    return FileResponse(image_path)
+    return FileResponse(image_path, media_type="image/jpeg", filename=photoName)
 
 @app.post("/events/{eventId}/photos")
-async def upload_images(eventId, files: List[UploadFile] = File(...)):
-    image_ids = []
-    for file in files:
-        image = Image.open(file.file)
-        image_id = photos_service.add_photo(image, eventId)
-        image_ids.append(image_id)
+async def upload_images(eventId: int, files: List[UploadFile] = File(...)):
+    """
+    Endpoint to upload images for a specific event.
+    """
+    try:
+        image_ids = []
+        for file in files:
+            try:
+                image = Image.open(file.file)
+                image_id = photos_service.add_photo(image, eventId)
+                image_ids.append(image_id)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, 
+                    detail=f"Error processing file {file.filename}: {str(e)}"
+                )
+        return {"image_ids": image_ids}
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error uploading images: {str(e)}"
+        )
 
-    return {"image_ids": image_ids}
 
 @app.delete("/events/{eventId}/photos")
 async def delete_images(eventId: int, photoIds: List[int]):
     for photoId in photoIds:
         photos_service.delete_photo(str(eventId), photoId)
     return {"message": "Images deleted successfully"}
-
-@app.get("/events/{eventId}/photos/{photoId}/caption")
-async def generate_caption(eventId: int, photoId: int):
-    photo_record = photos_service.get_photo(eventId, photoId)
-    # get the image embedding
-    image_embedding = json.loads(photo_record[0]["embedding"])
-    image_embedding = np.array(image_embedding)
-    # get the norm factor
-    norm_factor = photo_record[0]["norm"]
-    # comment this to show trained model
-    image_embedding = (image_embedding * norm_factor)
-    
-    caption = content_generator.generate_caption(image_embedding)
-    return {"caption": caption}
 
 @app.get("/events/{eventId}/photos/search/")
 async def search_images_by_text(eventId: int, text: str, threshold: float = Query(0.5)):
@@ -157,21 +172,72 @@ async def delete_event(event_id: int, org_id: int):
     
 
 class EventContext(BaseModel):
-    event_context: str
+    files: List[UploadFile] = File(...)
+    text: Optional[str] = None
 
 @app.post("/events/{event_id}/context")
-async def add_event_context(event_id: int, event_context: EventContext):
-    # Add the context embedding to the vector database
-    rag_service.insert_context(event_id, event_context.event_context)
-    
-    return {"message": "Event context added successfully", "event_id": event_id}
+async def upload_context(
+    event_id: int,
+    context_type: str = Query(..., description="Type of context to add: 'document' or 'main context'"),
+    files: Optional[Union[List[UploadFile], str]] = File(None),
+    text: Optional[str] = Form(None)
+):
+    """
+    Upload documents or add textual context for an event.
+    :param event_id: Event ID.
+    :param context_type: Type of context to add. It can be 'document' or 'main context'.
+    :param files: List of files to upload.
+    :param text: Textual context to add.
+    :return: Success message and event ID.
+    """
+    try:
+        if isinstance(files, str):
+            files = []
+        if context_type == "document":
+            if not files or not isinstance(files, list):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Files are required for 'document' context type."
+                )
+            context_service.process_documents(event_id, files)
+        elif context_type == "main context":
+            if not text:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Text is required for 'main context' type."
+                )
+            context_service.add_context(event_id, text, "main_context")
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid context_type '{context_type}'. Expected 'document' or 'main context'."
+            )
+
+        return {"message": "Context added successfully", "event_id": event_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @app.get("/events/{event_id}/context")
-async def get_event_context(event_id: int, query: str = Query(None), n: int = Query(5)):
-    # Get the similar context for the event
-    similar_context = rag_service.get_similar_context(event_id, query, n)
-    
-    return {"similar_context": similar_context}
+async def get_event_context_by_event_id(event_id: int):
+    """
+    Get all contexts associated with a specific event ID.
+
+    :param event_id: Event identifier.
+    :return: A list of context IDs and their corresponding context types.
+    """
+    try:
+        # Fetch contexts from the database using the event ID
+        db = DatabaseService()
+        contexts = db.read_records("contexts", {"event_id": event_id})
+        db.close()
+
+        if not contexts:
+            raise HTTPException(status_code=404, detail=f"No contexts found for event ID {event_id}")
+        context_list = [{"id": context["id"], "context_type": context["context_type"]} for context in contexts]
+        return {"event_id": event_id, "contexts": context_list}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error retrieving contexts: {str(e)}")
+
 
 ## POSTS ENDPOINTS
 @app.post("/posts", response_model=dict)
@@ -229,6 +295,49 @@ async def delete_post(post_id: int, post_service: PostService = Depends(get_post
     if not success:
         raise HTTPException(status_code=404, detail="Post not found or not deleted")
     return {"message": "Post deleted successfully"}
+
+### CAPTION GENERATION ENDPOINT
+@app.post("/posts/{post_id}/generate")
+async def generate_post_caption(
+    post_id: int,
+    request: CaptionRequest,
+    post_service: PostService = Depends(get_post_service)
+):
+    """
+    Generate a caption for a post using associated images and context.
+
+    :param post_id: Post ID to fetch associated images.
+    :param user_prompt: User's main prompt for the caption.
+    :param tone: Tone for the caption.
+    :param max_new_tokens: Maximum length of the generated caption.
+    :param post_service: Dependency injection for PostService.
+    :return: Generated caption, relevant context, and image descriptions.
+    """
+    try:
+        # Fetch the post details to retrieve the associated event ID
+        post = post_service.get_post(post_id)
+        if not post:
+            raise HTTPException(status_code=404, detail=f"Post with ID {post_id} not found.")
+
+        event_id = post["event_id"]  # Assuming the post object has the event_id field
+        image_ids = post["image_ids"]
+
+        # Generate descriptions for all images associated with the post
+        image_descriptions = content_generation_service.get_image_descriptions(event_id, image_ids)
+        # Generate the post caption
+        result = content_generation_service.generate_post_caption(
+            image_description=image_descriptions,
+            user_prompt=request.user_prompt,
+            event_id=event_id,
+            tone=request.tone,
+            max_new_tokens=request.max_new_tokens
+        )
+
+        return result
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating caption: {str(e)}")
 
 ## FEEDBACK ENDPOINTS
 class Feedback(BaseModel):

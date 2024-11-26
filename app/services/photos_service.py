@@ -1,12 +1,15 @@
 import json
 import os
+from io import BytesIO
 from app.services.embedding_service import EmbeddingService
 from app.services.database_service import DatabaseService
+from app.services.upload_service import UploadService
 
 class PhotosService:
-    def __init__(self, embedding_service: EmbeddingService):
-        self.IMAGE_DIR = "images"
-        self.embedding_service = embedding_service
+    def __init__(self):
+        self.IMAGE_DIR = "uploads/images"
+        self.embedding_service = EmbeddingService()
+        self.upload_service = UploadService()
         
     def get_photo(self, event_id, photo_id):
         db = DatabaseService()
@@ -22,12 +25,17 @@ class PhotosService:
         norm_factor = float(norm_factor)
         image_id = db.insert_record("images", {"event_id": event_id, "embedding": json.dumps(image_embedding.tolist()[0]), "norm": norm_factor})
         db.close()
-        # Create the directory if it doesn't exist
-        if not os.path.exists(os.path.join(self.IMAGE_DIR, event_id)):
-            os.makedirs(os.path.join(self.IMAGE_DIR, event_id))
-        # Save the image with the ID as the name
-        image_path = os.path.join(self.IMAGE_DIR, event_id, f"{image_id}.png")
-        photo.save(image_path)  
+        # Convert the PIL image to bytes and save it to the file system
+        photo_io = BytesIO()
+        photo.save(photo_io, format="PNG")
+        photo_io.seek(0)
+
+        # Use the UploadService to save the image with the photo ID as the name
+        self.upload_service.upload_images(
+            files=[photo_io],  # The photo object must be wrapped in a list
+            event_id=event_id,
+            photo_names=[f"{image_id}.png"]
+        )  
         
         return image_id
 

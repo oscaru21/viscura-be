@@ -1,13 +1,32 @@
 CREATE EXTENSION IF NOT EXISTS vector;
+-- Drop tables if they exist
+DROP TABLE IF EXISTS embeddings CASCADE;
+DROP TABLE IF EXISTS contexts CASCADE;
+DROP TABLE IF EXISTS documents CASCADE;
+DROP TABLE IF EXISTS images CASCADE;
+DROP TABLE IF EXISTS posts CASCADE;
+DROP TABLE IF EXISTS events CASCADE;
+DROP TABLE IF EXISTS feedbacks CASCADE;
 /*
 An embedding created with CLIP (Contrastive Language–Image Pretraining) 
 typically has 512 dimensions for both text and image embeddings
 */
-CREATE TABLE embeddings (
+CREATE TABLE contexts (
     id bigserial PRIMARY KEY, 
     event_id integer,
+    doc_id integer, -- id of the document if context_type is document
+    context_type TEXT, -- main context (from text input), or text from documents
     content TEXT, 
-    embedding vector(512)
+    embedding vector(384)
+);
+
+-- table to store documents for event context
+CREATE TABLE documents (
+    id bigserial PRIMARY KEY, 
+    event_id integer,
+    title TEXT,
+    file_ext TEXT,
+    user_id integer
 );
 
 CREATE TABLE images (
