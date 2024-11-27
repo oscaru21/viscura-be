@@ -19,7 +19,7 @@ from app.services.search_service import SearchService
 from app.services.photos_service import PhotosService
 from app.services.events_service import EventsService
 from app.services.feedback_service import FeedbackService
-from app.services.filter_service import ImageFilter
+from app.services.filter_service import FilteringService
 # from app.services.authorization_service import AuthorizationService
 from app.services.post_service import PostService, PostCreateRequest, PostUpdateRequest
 from app.services.database_service import DatabaseService
@@ -61,7 +61,7 @@ feedback_service = FeedbackService()
 upload_service = UploadService(base_upload_dir="uploads", remote_server_url="http://127.0.0.1:8000/upload")
 context_service = ContextService()
 content_generation_service = ContentGenerationService(model_name=MODEL_NAME)
-image_filter = ImageFilter(threshold=100.0)  # Instantiate ImageFilter with a blur threshold
+filtering_service = FilteringService(photos_service=photos_service)
 
 
 
@@ -76,51 +76,51 @@ def get_post_service(db: DatabaseService = Depends(get_database_service)):
     return PostService(db=db)
 
   # New filter endpoint using ImageFilter
-@app.post("/events/{eventId}/photos-with-filtering")
-async def filter_images(
-    request: Request,
-    eventId: int,
-    autoshow_image_path: str = Form(...),
-    threshold: float = Form(...)
-):
-    if not os.path.exists(autoshow_image_path):
-        raise HTTPException(status_code=400, detail="Source path does not exist.")
-    if not os.path.isdir(autoshow_image_path):
-        raise HTTPException(status_code=400, detail="The provided path is not a directory.")
+# @app.post("/events/{eventId}/photos-with-filtering")
+# async def filter_images(
+#     request: Request,
+#     eventId: int,
+#     autoshow_image_path: str = Form(...),
+#     threshold: float = Form(...)
+# ):
+#     if not os.path.exists(autoshow_image_path):
+#         raise HTTPException(status_code=400, detail="Source path does not exist.")
+#     if not os.path.isdir(autoshow_image_path):
+#         raise HTTPException(status_code=400, detail="The provided path is not a directory.")
 
-    blurred_path = os.path.join(autoshow_image_path, "blurred")
-    sharp_path = os.path.join(autoshow_image_path, "sharp")
-    os.makedirs(blurred_path, exist_ok=True)
-    os.makedirs(sharp_path, exist_ok=True)
+#     blurred_path = os.path.join(autoshow_image_path, "blurred")
+#     sharp_path = os.path.join(autoshow_image_path, "sharp")
+#     os.makedirs(blurred_path, exist_ok=True)
+#     os.makedirs(sharp_path, exist_ok=True)
 
-    blurred_count = 0
-    sharp_count = 0
+#     blurred_count = 0
+#     sharp_count = 0
 
-    for img_name in os.listdir(autoshow_image_path):
-        img_path = os.path.join(autoshow_image_path, img_name)
-        if not img_name.lower().endswith(('.bmp', '.jpg', '.jpeg', '.png')):
-            continue
+#     for img_name in os.listdir(autoshow_image_path):
+#         img_path = os.path.join(autoshow_image_path, img_name)
+#         if not img_name.lower().endswith(('.bmp', '.jpg', '.jpeg', '.png')):
+#             continue
 
-        image = cv2.imread(img_path)
-        if image is None:
-            continue  # Skip if image cannot be read
+#         image = cv2.imread(img_path)
+#         if image is None:
+#             continue  # Skip if image cannot be read
 
-        # Check if the image is blurry using ImageFilter
-        if image_filter.is_image_blurry(image):
-            shutil.move(img_path, os.path.join(blurred_path, img_name))
-            blurred_count += 1
-        else:
-            shutil.move(img_path, os.path.join(sharp_path, img_name))
-            sharp_count += 1
+#         # Check if the image is blurry using ImageFilter
+#         if image_filter.is_image_blurry(image):
+#             shutil.move(img_path, os.path.join(blurred_path, img_name))
+#             blurred_count += 1
+#         else:
+#             shutil.move(img_path, os.path.join(sharp_path, img_name))
+#             sharp_count += 1
 
-    return {
-        "total_images": blurred_count + sharp_count,
-        "blurred_count": blurred_count,
-        "sharp_count": sharp_count,
-        "blurred_path": blurred_path,
-        "sharp_path": sharp_path,
-        "event_id": eventId
-    }
+#     return {
+#         "total_images": blurred_count + sharp_count,
+#         "blurred_count": blurred_count,
+#         "sharp_count": sharp_count,
+#         "blurred_path": blurred_path,
+#         "sharp_path": sharp_path,
+#         "event_id": eventId
+#     }
   
 ## PHOTOS ENDPOINTS
 class Photo(BaseModel):
@@ -159,31 +159,56 @@ async def serve_image(eventId: int, photoName: str):
     return FileResponse(image_path, media_type="image/jpeg", filename=photoName)
 
 @app.post("/events/{eventId}/photos")
-async def upload_images(eventId: int, files: List[UploadFile] = File(...)):
+async def upload_images(
+    eventId: int,
+    files: List[UploadFile] = File(...),
+    apply_filter: bool = Form(False),
+    threshold: float = Form(100.0)
+):
     """
-    Endpoint to upload images for a specific event.
+    Endpoint to upload images for a specific event with optional filtering for quality.
+    :param eventId: Event ID for the images.
+    :param files: List of image files to upload.
+    :param apply_filter: Flag to apply filtering for image quality.
+    :param threshold: Threshold for image quality filtering.
+    :return: Success message and uploaded image IDs.
     """
     try:
-        image_ids = []
-        for file in files:
-            try:
-                image = Image.open(file.file)
-                image_id = photos_service.add_photo(image, eventId)
-                image_ids.append(image_id)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=500, 
-                    detail=f"Error processing file {file.filename}: {str(e)}"
-                )
-        return {"image_ids": image_ids}
+        if apply_filter:
+            uploaded_image_ids, sharp_count, blurred_count = filtering_service.process_and_upload_images(
+                event_id=eventId, files=files, threshold=threshold
+            )
+        else:
+            # If no filtering is applied, upload all images 
+            uploaded_image_ids = []
+            for file in files:
+                file_content = file.file.read()
+                np_img = np.frombuffer(file_content, np.uint8)
+                image = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
+                image=filtering_service.convert_to_pil_image(image)
+                if image is not None:
+                    image_id = photos_service.add_photo(image, eventId)
+                    uploaded_image_ids.append(image_id)
+
+            sharp_count = len(uploaded_image_ids)
+            blurred_count = 0
+
+        return {
+            "message": "Images processed and uploaded successfully.",
+            "total_images": len(files),
+            "blurred_count": blurred_count,
+            "sharp_count": sharp_count,
+            "uploaded_image_ids": uploaded_image_ids,
+            "event_id": eventId
+        }
+
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error uploading images: {str(e)}"
+            detail=f"Unexpected error occurred: {str(e)}"
         )
-
 
 @app.delete("/events/{eventId}/photos")
 async def delete_images(eventId: int, photoIds: List[int]):
