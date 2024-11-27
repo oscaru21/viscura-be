@@ -135,13 +135,15 @@ async def upload_images(
             # If no filtering is applied, upload all images 
             uploaded_image_ids = []
             for file in files:
-                file_content = file.file.read()
-                np_img = np.frombuffer(file_content, np.uint8)
-                image = cv2.imdecode(np_img, cv2.IMREAD_COLOR)
-                image=filtering_service.convert_to_pil_image(image)
-                if image is not None:
+                try:
+                    image = Image.open(file.file)
                     image_id = photos_service.add_photo(image, eventId)
                     uploaded_image_ids.append(image_id)
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Error processing file {file.filename}: {str(e)}"
+                    )
 
             sharp_count = len(uploaded_image_ids)
             blurred_count = 0
