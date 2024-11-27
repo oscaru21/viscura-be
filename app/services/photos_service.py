@@ -39,9 +39,6 @@ class PhotosService:
         
         return image_id
 
-    def update_photo(self, photo_id, photo):
-        return self.photos_repository.update_photo(photo_id, photo)
-
     def delete_photo(self, event_id, photo_id):
         db = DatabaseService()
         db.delete_record("images", {"event_id": event_id, "id": photo_id})
