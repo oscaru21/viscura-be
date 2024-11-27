@@ -29,6 +29,10 @@ from app.services.content_generation_service import ContentGenerationService, Ca
 
 from pydantic import BaseModel
 
+from dotenv import load_dotenv
+
+load_dotenv()  # take environment variables from .env.
+
 
 app = FastAPI()
 
@@ -45,7 +49,7 @@ app.add_middleware(
 )
 
 IMAGE_DIR = "uploads/images"
-MODEL_NAME = 'meta-llama/Llama-3.2-1B'
+MODEL_NAME = 'microsoft/Phi-3.5-mini-instruct'
 
 # define services
 image_description_service = ImageDescriptionService()
@@ -138,7 +142,6 @@ async def serve_image(eventId: int):
         )
     images_names = os.listdir(dir)
     #map the image names to Photo objects
-    print(images_names)
     images = [{"id": int(name.split('.')[0]), "name": name, "url": f"http://localhost:8000/events/{eventId}/photos/{name}", "resolution": "1920x1080"} for name in images_names]
     return images
 
