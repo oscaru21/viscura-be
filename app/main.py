@@ -74,53 +74,6 @@ def get_database_service():
 # Dependency to provide PostService with a DatabaseService instance
 def get_post_service(db: DatabaseService = Depends(get_database_service)):
     return PostService(db=db)
-
-  # New filter endpoint using ImageFilter
-# @app.post("/events/{eventId}/photos-with-filtering")
-# async def filter_images(
-#     request: Request,
-#     eventId: int,
-#     autoshow_image_path: str = Form(...),
-#     threshold: float = Form(...)
-# ):
-#     if not os.path.exists(autoshow_image_path):
-#         raise HTTPException(status_code=400, detail="Source path does not exist.")
-#     if not os.path.isdir(autoshow_image_path):
-#         raise HTTPException(status_code=400, detail="The provided path is not a directory.")
-
-#     blurred_path = os.path.join(autoshow_image_path, "blurred")
-#     sharp_path = os.path.join(autoshow_image_path, "sharp")
-#     os.makedirs(blurred_path, exist_ok=True)
-#     os.makedirs(sharp_path, exist_ok=True)
-
-#     blurred_count = 0
-#     sharp_count = 0
-
-#     for img_name in os.listdir(autoshow_image_path):
-#         img_path = os.path.join(autoshow_image_path, img_name)
-#         if not img_name.lower().endswith(('.bmp', '.jpg', '.jpeg', '.png')):
-#             continue
-
-#         image = cv2.imread(img_path)
-#         if image is None:
-#             continue  # Skip if image cannot be read
-
-#         # Check if the image is blurry using ImageFilter
-#         if image_filter.is_image_blurry(image):
-#             shutil.move(img_path, os.path.join(blurred_path, img_name))
-#             blurred_count += 1
-#         else:
-#             shutil.move(img_path, os.path.join(sharp_path, img_name))
-#             sharp_count += 1
-
-#     return {
-#         "total_images": blurred_count + sharp_count,
-#         "blurred_count": blurred_count,
-#         "sharp_count": sharp_count,
-#         "blurred_path": blurred_path,
-#         "sharp_path": sharp_path,
-#         "event_id": eventId
-#     }
   
 ## PHOTOS ENDPOINTS
 class Photo(BaseModel):
