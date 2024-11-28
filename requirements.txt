@@ -17,3 +17,8 @@ requests
 huggingface-hub
 opencv-python
 python-dotenv
+python-jose
+passlib
+redis
+bcrypt
+
