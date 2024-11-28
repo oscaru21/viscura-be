@@ -60,6 +60,32 @@ CREATE TABLE feedbacks (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE roles (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) UNIQUE NOT NULL
+);
+
+-- insert default roles
+INSERT INTO roles (name) VALUES
+('photographer'),
+('content manager'),
+('content reviewer');
+
+CREATE TABLE user_roles (
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    role_id INT REFERENCES roles(id) ON DELETE CASCADE,
+    PRIMARY KEY (user_id, role_id)
+);
+
 -- insert sample events some events
 INSERT INTO events (title, description, org_id) VALUES ('Event 1', 'Event 1 description', 1);
 INSERT INTO events (title, description, org_id) VALUES ('Event 2', 'Event 2 description', 1);
@@ -68,3 +94,4 @@ INSERT INTO events (title, description, org_id) VALUES ('Event 3', 'Event 3 desc
 INSERT INTO feedbacks (post_id, event_id, feedback_status, feedback_comment, created_at) VALUES (7, 7, 'Approved', 'good post, i like the content', '2024-10-31 17:54:28');
 INSERT INTO feedbacks (post_id, event_id, feedback_status, feedback_comment, created_at) VALUES (17, 17, 'Rejected', 'bad post, i dont like the caption', '2024-11-01 11:13:28');
 INSERT INTO feedbacks (post_id, event_id, feedback_status, feedback_comment, created_at) VALUES (27, 27, 'Pending', ' i like the content, but the lack of emojis is a pain in the ass','2024-10-31 07:04:28');
+
