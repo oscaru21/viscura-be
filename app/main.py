@@ -1,17 +1,13 @@
-from fastapi import FastAPI, File, UploadFile, Query, Request, Form, HTTPException, Depends, Form
+from fastapi import FastAPI, File, UploadFile, Query, Form, HTTPException, Depends, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse,JSONResponse, HTMLResponse
+from fastapi.responses import FileResponse, JSONResponse
 from PIL import Image
 from typing import List, Optional, Union
 import os
-import json
-import shutil
-import cv2
+
 
 from pdfminer.high_level import extract_text
 from docx import Document 
-
-import numpy as np
 
 from app.services.image_description_service import ImageDescriptionService
 from app.services.embedding_service import EmbeddingService
@@ -25,7 +21,9 @@ from app.services.post_service import PostService, PostCreateRequest, PostUpdate
 from app.services.database_service import DatabaseService
 from app.services.upload_service import UploadService
 from app.services.context_service import ContextService
-from app.services.content_generation_service import ContentGenerationService, CaptionRequest        
+from app.services.content_generation_service import ContentGenerationService, CaptionRequest    
+from app.services.auth_service import AuthService
+from app.schemas.auth import UserRegisterRequest, UserLoginRequest, TokenResponse   
 
 from pydantic import BaseModel
 
@@ -62,6 +60,7 @@ upload_service = UploadService(base_upload_dir="uploads", remote_server_url="htt
 context_service = ContextService()
 content_generation_service = ContentGenerationService(model_name=MODEL_NAME)
 filtering_service = FilteringService(photos_service=photos_service)
+auth_service = AuthService()
 
 
 
@@ -398,3 +397,56 @@ async def get_feedback(event_id: int, post_id: int):
 async def delete_feedback(event_id: int, post_id: int, feedback_id: int):
     feedback_service.delete_feedback(event_id, post_id, feedback_id)
     return {"message": "Feedback deleted successfully"}
+
+### AUTH ENDPOINTS
+@app.post("/auth/register", response_model=TokenResponse)
+async def register(user_data: UserRegisterRequest):
+    """
+    Register a new user with the given information.
+    :param user_data: User registration data
+    :return: Access token for the registered user
+    """
+    try:
+        user = auth_service.register_user(user_data)
+        access_token = auth_service.create_access_token(data={"sub": user.email})
+        return TokenResponse(access_token=access_token, token_type="bearer")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/auth/login", response_model=TokenResponse)
+async def login(login_data: UserLoginRequest):
+    """
+    Authenticate the user by email and password and return a token if successful.
+    :param login_data: User login data
+    :return: Access token for the authenticated
+    """
+    token = auth_service.authenticate_user(login_data)
+    if not token:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return token
+
+@app.post("/auth/logout", summary="Logout the user", tags=["auth"])
+async def logout(
+    authorization: Optional[str] = Header(None, description="Bearer token for the user"), 
+    auth_service: AuthService = Depends(AuthService)
+):
+    """
+    Logout the user by blacklisting their JWT token.
+    :param authorization: Bearer token for the user
+    :param auth_service: AuthService dependency
+    :return: Success message on logout
+    """
+    try:
+        if not authorization:
+            raise HTTPException(status_code=400, detail="Authorization header is missing")
+
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=400, detail="Invalid Authorization header format")
+        token = authorization.split(" ")[1]
+        auth_service.logout_user(token)
+        return {"message": "Successfully logged out"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to logout user: {str(e)}")
