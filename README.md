@@ -66,6 +66,20 @@ Ensure you have the following prerequisites:
 
 Make sure to check the logs for any errors during the build process.
 
+## 6. Set up Redis
+
+Given that Docker daemon is running, run the following command:
+
+    ```bash
+    docker run --name redis -p 6379:6379 -d redis
+    ```
+
+Verify that redis is running after the container starts (optional):
+
+    ```bash
+    docker ps
+    ```
+
 
 # Set up Hugging Face  
 
