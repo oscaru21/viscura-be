@@ -1,6 +1,10 @@
 from fastapi import FastAPI, File, UploadFile, Query, Form, HTTPException, Depends, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.openapi.models import APIKey
+from fastapi.openapi.models import SecuritySchemeType
+from fastapi.openapi.utils import get_openapi
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from PIL import Image
 from typing import List, Optional, Union
 import os
@@ -33,6 +37,7 @@ load_dotenv()  # take environment variables from .env.
 
 
 app = FastAPI()
+security_scheme = HTTPBearer()
 
 origins = [
     "http://localhost:4200"
@@ -73,6 +78,12 @@ def get_database_service():
 # Dependency to provide PostService with a DatabaseService instance
 def get_post_service(db: DatabaseService = Depends(get_database_service)):
     return PostService(db=db)
+
+# Dependency to validate the token
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
+    if not credentials:
+        raise HTTPException(status_code=403, detail="Not authenticated")
+    return credentials.credentials
   
 ## PHOTOS ENDPOINTS
 class Photo(BaseModel):
@@ -428,7 +439,7 @@ async def login(login_data: UserLoginRequest):
 
 @app.post("/auth/logout", summary="Logout the user", tags=["auth"])
 async def logout(
-    authorization: Optional[str] = Header(None, description="Bearer token for the user"), 
+    authorization: HTTPAuthorizationCredentials = Depends(security_scheme),
     auth_service: AuthService = Depends(AuthService)
 ):
     """
@@ -438,12 +449,7 @@ async def logout(
     :return: Success message on logout
     """
     try:
-        if not authorization:
-            raise HTTPException(status_code=400, detail="Authorization header is missing")
-
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(status_code=400, detail="Invalid Authorization header format")
-        token = authorization.split(" ")[1]
+        token = authorization.credentials
         auth_service.logout_user(token)
         return {"message": "Successfully logged out"}
     except ValueError as e:
