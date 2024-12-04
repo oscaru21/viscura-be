@@ -124,7 +124,6 @@ class AuthService:
                 """
                 db.cursor.execute(query, (user["id"],))
                 roles_data = db.cursor.fetchall()
-                print("Roles data: ", roles_data)
                 roles = [role["name"] for role in roles_data]  
                 access_token = self.create_access_token(data={"sub": user["email"]}, roles=roles)
                 return TokenResponse(access_token=access_token, token_type="bearer")
@@ -138,8 +137,6 @@ class AuthService:
             payload = self.decode_access_token(token)
             if not payload:
                 raise ValueError("Invalid token")
-            
-            print(f"Decoded payload: {payload}")  # Debugging payload
 
             exp = payload.get("exp")
             if not exp:
