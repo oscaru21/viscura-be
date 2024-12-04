@@ -26,11 +26,12 @@ class AuthService:
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         return self.pwd_context.verify(plain_password, hashed_password)
 
-    def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    def create_access_token(self, data: dict, roles: List[str], expires_delta: Optional[timedelta] = None) -> str:
         """
         Create a JWT access token with an optional expiration.
         """
         to_encode = data.copy()
+        to_encode["roles"] = roles
         if expires_delta:
             expire = datetime.now(timezone.utc) + expires_delta
         else:
@@ -115,7 +116,17 @@ class AuthService:
             user = user_data[0]
 
             if self.verify_password(login_data.password, user["password_hash"]):
-                access_token = self.create_access_token(data={"sub": user["email"]})
+                query = """
+                    SELECT roles.name
+                    FROM user_roles
+                    JOIN roles ON user_roles.role_id = roles.id
+                    WHERE user_roles.user_id = %s
+                """
+                db.cursor.execute(query, (user["id"],))
+                roles_data = db.cursor.fetchall()
+                print("Roles data: ", roles_data)
+                roles = [role["name"] for role in roles_data]  
+                access_token = self.create_access_token(data={"sub": user["email"]}, roles=roles)
                 return TokenResponse(access_token=access_token, token_type="bearer")
             return None
 
