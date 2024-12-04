@@ -24,14 +24,27 @@ class DatabaseService:
         """
         self.close()
 
-    def insert_record(self, table, data):
+    def insert_record(self, table, data, return_id=True):
+        """
+        Insert a record into the specified table.
+        :param table: Name of the table.
+        :param data: Dictionary containing column-value pairs to insert.
+        :param return_id: Whether to return the ID of the inserted record.
+        :return: The ID of the inserted record if return_id is True, otherwise None.
+        """
         columns = ', '.join(data.keys())
         values = ', '.join(['%s'] * len(data))
-        query = f"INSERT INTO {table} ({columns}) VALUES ({values}) RETURNING id"
+        query = f"INSERT INTO {table} ({columns}) VALUES ({values})"
+        
+        if return_id:
+            query += " RETURNING id"
+
         self.cursor.execute(query, list(data.values()))
         self.connection.commit()
-        # Return the ID of the inserted record
-        return self.cursor.fetchone()['id']
+        
+        if return_id:
+            return self.cursor.fetchone()["id"]
+        return None
 
     def read_records(self, table, conditions=None):
         query = f"SELECT * FROM {table}"
