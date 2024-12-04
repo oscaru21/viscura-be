@@ -8,6 +8,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from PIL import Image
 from typing import List, Optional, Union
 import os
+from jose import jwt
 
 
 from pdfminer.high_level import extract_text
@@ -53,6 +54,8 @@ app.add_middleware(
 
 IMAGE_DIR = "uploads/images"
 MODEL_NAME = 'microsoft/Phi-3.5-mini-instruct'
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
+ALGORITHM = "HS256"
 
 # define services
 image_description_service = ImageDescriptionService()
@@ -81,9 +84,27 @@ def get_post_service(db: DatabaseService = Depends(get_database_service)):
 
 # Dependency to validate the token
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
-    if not credentials:
-        raise HTTPException(status_code=403, detail="Not authenticated")
-    return credentials.credentials
+    """
+    Extract the current user information from the JWT token.
+    """
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if not payload:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        return payload  # Return the decoded payload, including roles
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+# Dependency to check if the current user has at least one of the allowed roles
+def require_role(*allowed_roles: str):
+    def dependency(credentials: dict = Depends(get_current_user)):
+        user_roles = credentials.get("roles", [])
+        if not any(role in allowed_roles for role in user_roles):
+            raise HTTPException(status_code=403, detail="Access denied: insufficient permissions")
+        return credentials  # Return the full user payload if validation passes
+
+    return dependency
   
 ## PHOTOS ENDPOINTS
 class Photo(BaseModel):
@@ -126,7 +147,8 @@ async def upload_images(
     eventId: int,
     files: List[UploadFile] = File(...),
     apply_filter: bool = Form(False),
-    threshold: float = Form(100.0)
+    threshold: float = Form(100.0),
+    _: dict = Depends(require_role("photographer"))
 ):
     """
     Endpoint to upload images for a specific event with optional filtering for quality.
@@ -419,7 +441,10 @@ async def register(user_data: UserRegisterRequest):
     """
     try:
         user = auth_service.register_user(user_data)
-        access_token = auth_service.create_access_token(data={"sub": user.email})
+        access_token = auth_service.create_access_token(
+            data={"sub": user.email},
+            roles=user.roles
+        )
         return TokenResponse(access_token=access_token, token_type="bearer")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
