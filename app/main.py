@@ -77,7 +77,6 @@ async def enforce_authentication(request: Request, call_next):
     exempt_paths = [
         "/auth/login", 
         "/auth/register", 
-        "/auth/logout",
         "/docs",
         "/openapi.json",
         ]
