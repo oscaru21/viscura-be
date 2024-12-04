@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Query, Form, HTTPException, Depends, Form, Header
+from fastapi import FastAPI, File, UploadFile, Query, Form, HTTPException, Depends, Form, Security, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.openapi.models import APIKey
@@ -52,6 +52,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 IMAGE_DIR = "uploads/images"
 MODEL_NAME = 'microsoft/Phi-3.5-mini-instruct'
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
@@ -70,6 +71,58 @@ content_generation_service = ContentGenerationService(model_name=MODEL_NAME)
 filtering_service = FilteringService(photos_service=photos_service)
 auth_service = AuthService()
 
+@app.middleware("http")
+async def enforce_authentication(request: Request, call_next):
+    # Exempt specific paths
+    exempt_paths = [
+        "/auth/login", 
+        "/auth/register", 
+        "/auth/logout",
+        "/docs",
+        "/openapi.json",
+        ]
+    if any(request.url.path.startswith(path) for path in exempt_paths):
+        return await call_next(request)
+    # Check authentication for all other paths
+    try:
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            raise HTTPException(status_code=401, detail="Authorization header missing")
+        token = auth_header.split(" ")[1]
+        jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except Exception as e:
+        return JSONResponse(status_code=401, content={"detail": str(e)})
+
+    return await call_next(request)
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title="VISCURA Backend",
+        version="1.0.0",
+        description="APIs for the VISCURA project",
+        routes=app.routes,
+    )
+    openapi_schema["components"]["securitySchemes"] = {
+        "HTTPBearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+        }
+    }
+    for path, methods in openapi_schema["paths"].items():
+        for method in methods.values():
+            # Add security to all endpoints except login, register, and logout
+            if path not in ["/auth/login", "/auth/register", "/auth/logout"]:
+                method.setdefault("security", [{"HTTPBearer": []}])
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
 
 
 ### DEPENDENCIES
@@ -83,23 +136,48 @@ def get_post_service(db: DatabaseService = Depends(get_database_service)):
     return PostService(db=db)
 
 # Dependency to validate the token
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
+def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security_scheme)):
     """
     Extract the current user information from the JWT token.
     """
     try:
         token = credentials.credentials
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        print(f"Decoded token payload: {payload}")  # Debug payload
+        print(f"Decoded roles: {payload.get('roles', [])}")
+
         if not payload:
-            raise HTTPException(status_code=401, detail="Invalid or expired token")
-        return payload  # Return the decoded payload, including roles
-    except jwt.JWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if "roles" not in payload:
+            raise HTTPException(status_code=401, detail="Token missing roles")
+        return payload  # Return the decoded payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.JWTError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+    
+
+# Dependency to require authentication    
+def require_authentication(credentials: HTTPAuthorizationCredentials = Security(security_scheme)):
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if not payload:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return payload  # Return the decoded payload for further use
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.JWTError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+
 
 # Dependency to check if the current user has at least one of the allowed roles
 def require_role(*allowed_roles: str):
     def dependency(credentials: dict = Depends(get_current_user)):
         user_roles = credentials.get("roles", [])
+        print(f"Roles allowed: {allowed_roles}, User roles: {user_roles}") # Debugging
+        if not user_roles:
+            raise HTTPException(status_code=403, detail="User has no roles assigned")
         if not any(role in allowed_roles for role in user_roles):
             raise HTTPException(status_code=403, detail="Access denied: insufficient permissions")
         return credentials  # Return the full user payload if validation passes
@@ -113,8 +191,17 @@ class Photo(BaseModel):
     url: str
     resolution: str
 
-@app.get("/events/{eventId}/photos")
-async def serve_image(eventId: int):
+@app.get(
+        "/events/{eventId}/photos",
+        tags=["photos"],
+        summary="Get all photos for an event",
+        description="Get all photos for an event by providing the event ID.",
+        response_description="List of photos"
+         )
+async def serve_image(
+    eventId: int,
+    _: dict = Depends(require_authentication)
+    ):
     """
     Get all the photos for a given event
     """
@@ -129,8 +216,18 @@ async def serve_image(eventId: int):
     images = [{"id": int(name.split('.')[0]), "name": name, "url": f"http://localhost:8000/events/{eventId}/photos/{name}", "resolution": "1920x1080"} for name in images_names]
     return images
 
-@app.get("/events/{eventId}/photos/{photoName}")
-async def serve_image(eventId: int, photoName: str):
+@app.get(
+        "/events/{eventId}/photos/{photoName}",
+        tags=["photos"],
+        summary="Get a specific photo for an event",
+        description="Get a specific photo for an event by providing the event ID and photo name.",
+        response_description="Photo"
+         )
+async def serve_image(
+    eventId: int, 
+    photoName: str,
+    _: dict = Depends(require_authentication)
+    ):
     """
     Get a specific photo for a given event
     """
@@ -142,14 +239,20 @@ async def serve_image(eventId: int, photoName: str):
         return JSONResponse(status_code=404, content={"error": "Image not found."})
     return FileResponse(image_path, media_type="image/jpeg", filename=photoName)
 
-@app.post("/events/{eventId}/photos")
+@app.post(
+        "/events/{eventId}/photos",
+        tags=["photos"],
+        summary="Upload images for an event",
+        description="Upload images for an event by providing the event ID and a list of image files.",
+        response_description="Success message and uploaded image IDs"
+         )
 async def upload_images(
     eventId: int,
     files: List[UploadFile] = File(...),
     apply_filter: bool = Form(False),
     threshold: float = Form(100.0),
     _: dict = Depends(require_role("photographer"))
-):
+    ):
     """
     Endpoint to upload images for a specific event with optional filtering for quality.
     :param eventId: Event ID for the images.
@@ -197,14 +300,34 @@ async def upload_images(
             detail=f"Unexpected error occurred: {str(e)}"
         )
 
-@app.delete("/events/{eventId}/photos")
-async def delete_images(eventId: int, photoIds: List[int]):
+@app.delete("/events/{eventId}/photos",
+            tags=["photos"],
+            summary="Delete selected images from an event",
+            description="Delete selected images from an event by providing a list of photo IDs.",
+            response_description="Success message"
+            )
+async def delete_images(
+    eventId: int, 
+    photoIds: List[int],
+    _: dict = Depends(require_role("photographer", "content manager"))
+):
     for photoId in photoIds:
         photos_service.delete_photo(str(eventId), photoId)
     return {"message": "Images deleted successfully"}
 
-@app.get("/events/{eventId}/photos/search/")
-async def search_images_by_text(eventId: int, text: str, threshold: float = Query(0.5)):
+@app.get(
+        "/events/{eventId}/photos/search/",
+        tags=["photos"],
+        summary="Search images by text",
+        description="Search images by text using the provided query and threshold.",
+        response_description="List of image IDs"
+        )
+async def search_images_by_text(
+    eventId: int, 
+    text: str, 
+    threshold: float = Query(0.5),
+    _: dict = Depends(require_authentication)
+    ):
     text_embedding_np, _ = embedding_service.embed_text([text])
     results = search_service.search(eventId, text_embedding_np, threshold)
     results_list = [int(item) for item in results]
@@ -217,23 +340,61 @@ class Event(BaseModel):
     description: str
     org_id: int
 
-@app.post("/events")
-async def add_event(event: Event):
+@app.post(
+        "/events",
+        tags=["events"],
+        summary="Add an event",
+        description="Add an event by providing the title, description, and organization ID.",
+        response_description="Success message and event ID"
+        )
+async def add_event(
+    event: Event,
+    _: dict = Depends(require_role("content manager"))
+):
     event_id = events_service.add_event(event)
     return {"event_id": event_id}
 
-@app.get("/events")
-async def get_all_events(org_id: int):
+@app.get(
+        "/events",
+        tags=["events"],
+        summary="Get all events",
+        description="Get all events for an organization by providing the organization ID.",
+        response_description="List of events"
+        )
+async def get_all_events(
+    org_id: int,
+    _: dict = Depends(require_authentication)
+    ):
     events = events_service.get_all_events(org_id)
     return events
 
-@app.get("/events/{event_id}")
-async def get_event(event_id: int, org_id: int):
+@app.get(
+        "/events/{event_id}",
+        tags=["events"],
+        summary="Get an event by ID",
+        description="Get an event by providing the event ID and organization ID.",
+        response_description="Event details"
+        )
+async def get_event(
+    event_id: int, 
+    org_id: int,
+    _: dict = Depends(require_authentication)
+    ):
     event = events_service.get_event(org_id, event_id)
     return event
 
-@app.delete("/events/{event_id}")
-async def delete_event(event_id: int, org_id: int):
+@app.delete(
+            "/events/{event_id}",
+            tags=["events"],
+            summary="Delete an event",
+            description="Delete an event by providing the event ID and organization ID.",
+            response_description="Success message"
+            )
+async def delete_event(
+    event_id: int, 
+    org_id: int,
+    _: dict = Depends(require_role("content manager"))
+    ):
     events_service.delete_event(org_id, event_id)
     return {"message": "Event deleted successfully"}
     
@@ -242,13 +403,20 @@ class EventContext(BaseModel):
     files: List[UploadFile] = File(...)
     text: Optional[str] = None
 
-@app.post("/events/{event_id}/context")
+@app.post(
+          "/events/{event_id}/context",
+          tags=["context"],
+          summary="Upload context for an event",
+          description="Upload documents or add textual context for an event by providing the event ID and context type.",
+          response_description="Success message and event ID"
+          )
 async def upload_context(
     event_id: int,
     context_type: str = Query(..., description="Type of context to add: 'document' or 'main context'"),
     files: Optional[Union[List[UploadFile], str]] = File(None),
-    text: Optional[str] = Form(None)
-):
+    text: Optional[str] = Form(None),
+    _: dict = Depends(require_role("content manager"))
+    ):
     """
     Upload documents or add textual context for an event.
     :param event_id: Event ID.
@@ -284,8 +452,17 @@ async def upload_context(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
-@app.get("/events/{event_id}/context")
-async def get_event_context_by_event_id(event_id: int):
+@app.get(
+        "/events/{event_id}/context",
+        tags=["context"],
+        summary="Get context for an event",
+        description="Get all contexts for an event by providing the event ID.",
+        response_description="List of context IDs and their types"
+        )
+async def get_event_context_by_event_id(
+    event_id: int,
+    _: dict = Depends(require_authentication)
+    ):
     """
     Get all contexts associated with a specific event ID.
 
@@ -307,8 +484,19 @@ async def get_event_context_by_event_id(event_id: int):
 
 
 ## POSTS ENDPOINTS
-@app.post("/posts", response_model=dict)
-async def create_post(request: PostCreateRequest, post_service: PostService = Depends(get_post_service)):
+@app.post(
+        "/posts", 
+        response_model=dict,
+        tags=["posts"],
+        summary="Create a new post",
+        description="Create a new post by providing the event ID, caption, image IDs, and user ID.",
+        response_description="Post ID"
+        )
+async def create_post(
+    request: PostCreateRequest, 
+    post_service: PostService = Depends(get_post_service),
+    _: dict = Depends(require_role("content manager"))
+    ):
     """
     Endpoint to create a new post.
     """
@@ -320,8 +508,19 @@ async def create_post(request: PostCreateRequest, post_service: PostService = De
     )
     return {"post_id": post_id}
 
-@app.get("/posts/{post_id}", response_model=dict)
-async def get_post(post_id: int, post_service: PostService = Depends(get_post_service)):
+@app.get(
+        "/posts/{post_id}", 
+        response_model=dict,
+        tags=["posts"],
+        summary="Get a post by ID",
+        description="Get a post by providing the post ID.",
+        response_description="Post details"
+        )
+async def get_post(
+    post_id: int, 
+    post_service: PostService = Depends(get_post_service),
+    _: dict = Depends(require_role("content manager", "content reviewer"))
+    ):
     """
     Endpoint to get a post by its ID.
     """
@@ -330,16 +529,39 @@ async def get_post(post_id: int, post_service: PostService = Depends(get_post_se
         raise HTTPException(status_code=404, detail="Post not found")
     return post
 
-@app.get("/events/{event_id}/posts", response_model=List[dict])
-async def get_posts_by_event(event_id: int, post_service: PostService = Depends(get_post_service)):
+@app.get(
+        "/events/{event_id}/posts", 
+        response_model=List[dict],
+        tags=["posts"],
+        summary="Get all posts for an event",
+        description="Get all posts for an event by providing the event ID.",
+        response_description="List of posts"
+        )
+async def get_posts_by_event(
+    event_id: int, 
+    post_service: PostService = Depends(get_post_service),
+    _: dict = Depends(require_role("content manager", "content reviewer"))
+    ):
     """
     Endpoint to get all posts for a given event.
     """
     posts = post_service.get_posts_by_event(event_id)
     return posts
 
-@app.put("/posts/{post_id}", response_model=dict)
-async def update_post(post_id: int, request: PostUpdateRequest, post_service: PostService = Depends(get_post_service)):
+@app.put(
+        "/posts/{post_id}", 
+        response_model=dict,
+        tags=["posts"],
+        summary="Update an existing post",
+        description="Update an existing post by providing the post ID, event ID, caption, and image IDs.",
+        response_description="Success message"
+        )
+async def update_post(
+    post_id: int, 
+    request: PostUpdateRequest, 
+    post_service: PostService = Depends(get_post_service),
+    _: dict = Depends(require_role("content manager"))
+    ):
     """
     Endpoint to update an existing post.
     """
@@ -353,8 +575,19 @@ async def update_post(post_id: int, request: PostUpdateRequest, post_service: Po
         raise HTTPException(status_code=404, detail="Post not found or not updated")
     return {"message": "Post updated successfully"}
 
-@app.delete("/posts/{post_id}", response_model=dict)
-async def delete_post(post_id: int, post_service: PostService = Depends(get_post_service)):
+@app.delete(
+            "/posts/{post_id}", 
+            response_model=dict,
+            tags=["posts"],
+            summary="Delete a post by ID",
+            description="Delete a post by providing the post ID.",
+            response_description="Success message"
+            )
+async def delete_post(
+    post_id: int, 
+    post_service: PostService = Depends(get_post_service),
+    _: dict = Depends(require_role("content manager"))
+    ):
     """
     Endpoint to delete a post by its ID.
     """
@@ -364,12 +597,19 @@ async def delete_post(post_id: int, post_service: PostService = Depends(get_post
     return {"message": "Post deleted successfully"}
 
 ### CAPTION GENERATION ENDPOINT
-@app.post("/posts/{post_id}/generate")
+@app.post(
+          "/posts/{post_id}/generate",
+          tags=["content generation"],
+          summary="Generate a post caption",
+          description="Generate a caption for a post using associated images and context.",
+          response_description="Generated caption, relevant context, and image descriptions"
+          )
 async def generate_post_caption(
     post_id: int,
     request: CaptionRequest,
-    post_service: PostService = Depends(get_post_service)
-):
+    post_service: PostService = Depends(get_post_service),
+    _: dict = Depends(require_role("content manager"))
+    ):
     """
     Generate a caption for a post using associated images and context.
 
@@ -411,13 +651,34 @@ class Feedback(BaseModel):
     feedback: str
     status: str
 
-@app.post("/events/{event_id}/posts/{post_id}/feedback")
-async def add_feedback(event_id: int, post_id: int, feedback: Feedback):
+@app.post(
+          "/events/{event_id}/posts/{post_id}/feedback",
+          tags=["feedback"],
+          summary="Add feedback for a post",
+          description="Add feedback for a post by providing the event ID, post ID, and feedback details.",
+          response_description="Feedback ID"
+          )
+async def add_feedback(
+    event_id: int, 
+    post_id: int, 
+    feedback: Feedback,
+    _: dict = Depends(require_role("content reviewer"))
+    ):
     feedback_id = feedback_service.add_feedback(event_id, post_id, feedback)
     return {"feedback_id": feedback_id}
 
-@app.get("/events/{event_id}/posts/{post_id}/feedback")
-async def get_feedback(event_id: int, post_id: int):
+@app.get(
+        "/events/{event_id}/posts/{post_id}/feedback",
+        tags=["feedback"],
+        summary="Get feedback for a post",
+        description="Get feedback for a post by providing the event ID and post ID.",
+        response_description="Feedback details"
+        )
+async def get_feedback(
+    event_id: int, 
+    post_id: int,
+    _: dict = Depends(require_role("content manager", "content reviewer"))
+    ):
     feedback = feedback_service.get_feedback(event_id, post_id)
     return feedback
 
@@ -426,13 +687,31 @@ async def get_feedback(event_id: int, post_id: int):
 #     feedback_service.update_feedback(event_id, post_id, feedback_id, feedback)
 #     return {"message": "Feedback updated successfully"}
 
-@app.delete("/events/{event_id}/posts/{post_id}/feedback/{feedback_id}")
-async def delete_feedback(event_id: int, post_id: int, feedback_id: int):
+@app.delete(
+            "/events/{event_id}/posts/{post_id}/feedback/{feedback_id}",
+            tags=["feedback"],
+            summary="Delete feedback for a post",
+            description="Delete feedback for a post by providing the event ID, post ID, and feedback ID.",
+            response_description="Success message"
+            )
+async def delete_feedback(
+    event_id: int, 
+    post_id: int, 
+    feedback_id: int,
+    _: dict = Depends(require_role("content reviewer"))
+    ):
     feedback_service.delete_feedback(event_id, post_id, feedback_id)
     return {"message": "Feedback deleted successfully"}
 
 ### AUTH ENDPOINTS
-@app.post("/auth/register", response_model=TokenResponse)
+@app.post(
+          "/auth/register", 
+          response_model=TokenResponse,
+          tags=["auth"],
+          summary="Register a new user",
+          description="Register a new user by providing the user details.",
+          response_description="Access token"
+          )
 async def register(user_data: UserRegisterRequest):
     """
     Register a new user with the given information.
@@ -450,7 +729,14 @@ async def register(user_data: UserRegisterRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/auth/login", response_model=TokenResponse)
+@app.post(
+          "/auth/login", 
+          response_model=TokenResponse,
+          tags=["auth"],
+          summary="Authenticate the user",
+          description="Authenticate the user by email and password and return a token if successful.",
+          response_description="Access token"
+          )
 async def login(login_data: UserLoginRequest):
     """
     Authenticate the user by email and password and return a token if successful.
@@ -462,7 +748,13 @@ async def login(login_data: UserLoginRequest):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     return token
 
-@app.post("/auth/logout", summary="Logout the user", tags=["auth"])
+@app.post(
+          "/auth/logout", 
+          summary="Logout the user", 
+          tags=["auth"],
+          description="Logout the user by blacklisting their JWT token.",
+          response_description="Success message"
+          )
 async def logout(
     authorization: HTTPAuthorizationCredentials = Depends(security_scheme),
     auth_service: AuthService = Depends(AuthService)
