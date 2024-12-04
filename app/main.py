@@ -709,7 +709,7 @@ async def delete_feedback(
           response_model=TokenResponse,
           tags=["auth"],
           summary="Register a new user",
-          description="Register a new user by providing the user details.",
+          description="Register a new user by providing the user details. User roles can be 'content manager', 'content reviewer', or 'photographer'.",
           response_description="Access token"
           )
 async def register(user_data: UserRegisterRequest):
