@@ -8,6 +8,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from PIL import Image
 from typing import List, Optional, Union
 import os
+import re
 from jose import jwt
 
 
@@ -54,7 +55,7 @@ app.add_middleware(
 
 
 IMAGE_DIR = "uploads/images"
-MODEL_NAME = 'microsoft/Phi-3.5-mini-instruct'
+MODEL_NAME = 'Qwen/Qwen2.5-Coder-32B-Instruct'
 SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 
@@ -80,6 +81,16 @@ async def enforce_authentication(request: Request, call_next):
         "/docs",
         "/openapi.json",
         ]
+    # Regular expression for the specific pattern
+    pattern = re.compile(r"^/events/\d+/photos/[^/]+$")
+    # Check if the request path matches the specific pattern
+    if pattern.match(request.url.path):
+        return await call_next(request)
+    
+    # Bypass authentication for OPTIONS preflight requests
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    
     if any(request.url.path.startswith(path) for path in exempt_paths):
         return await call_next(request)
     # Check authentication for all other paths
@@ -224,8 +235,7 @@ async def serve_image(
          )
 async def serve_image(
     eventId: int, 
-    photoName: str,
-    _: dict = Depends(require_authentication)
+    photoName: str
     ):
     """
     Get a specific photo for a given event

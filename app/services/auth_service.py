@@ -7,7 +7,7 @@ from app.services.database_service import DatabaseService
 from app.schemas.auth import UserRegisterRequest, UserLoginRequest, TokenResponse, UserResponse
 import os
 
-SECRET_KEY = os.environ.get("JWT_SECRET_KEY")
+SECRET_KEY = "secret"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -126,7 +126,7 @@ class AuthService:
                 roles_data = db.cursor.fetchall()
                 roles = [role["name"] for role in roles_data]  
                 access_token = self.create_access_token(data={"sub": user["email"]}, roles=roles)
-                return TokenResponse(access_token=access_token, token_type="bearer")
+                return TokenResponse(access_token=access_token, token_type="bearer", roles=roles, email=user["email"], id=user["id"])
             return None
 
     def logout_user(self, token: str):
