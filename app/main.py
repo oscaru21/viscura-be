@@ -733,7 +733,7 @@ async def register(user_data: UserRegisterRequest):
             data={"sub": user.email},
             roles=user.roles
         )
-        return TokenResponse(access_token=access_token, token_type="bearer")
+        return TokenResponse(access_token=access_token, token_type="bearer", roles=[], email='oscar', id='1')
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
