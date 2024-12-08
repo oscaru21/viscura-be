@@ -56,6 +56,7 @@ class ContentGenerationService:
             - Use a {tone} tone and include at least one emoji.
             - Highlight key details and exciting aspects from the context.
             - Avoid repetition and highlight the most exciting aspects.
+            - Only return complete sentences or thoughts.
 
             User Prompt:
             {user_prompt}
@@ -150,7 +151,15 @@ class ContentGenerationService:
         response = requests.post(
             self.api_url,
             headers=self.headers,
-            json={"inputs": formatted_prompt, "parameters": {"max_new_tokens": max_new_tokens}}
+            json={
+            "inputs": formatted_prompt,
+            "parameters": {
+                "max_new_tokens": max_new_tokens,
+                "stop": ["\n", "."], 
+                "temperature": 0.7,   
+                "top_p": 0.9,         
+                },
+            }
         )
         response.raise_for_status()
         generated_text = response.json()[0]['generated_text']
