@@ -98,7 +98,15 @@ Once the token is generated, copy it and save it to a txt file locally for futur
 Create a file named .env at the root of the project add a variable named `HUGGINGFACE_API_TOKEN` and input your token:
 `HUGGINGFACE_API_TOKEN=hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx`
 
+# UNIT TEST
+## Run Unit Tests
 
+To run the unit tests, navigate to the `app/tests` folder and run the following commands:
+
+```bash
+export PYTHONPATH=.
+python -m unittest discover
+```
 
 
 

@@ -3,7 +3,8 @@ from app.services.context_service import ContextService
 from app.services.image_description_service import ImageDescriptionService
 from app.services.photos_service import PhotosService
 from app.services.database_service import DatabaseService
-from app.services.embedding_service import EmbeddingService 
+from app.services.embedding_service import EmbeddingService
+from app.services.upload_service import UploadService
 from typing import Optional
 import json
 import numpy as np
