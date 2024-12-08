@@ -150,7 +150,15 @@ class ContentGenerationService:
         response = requests.post(
             self.api_url,
             headers=self.headers,
-            json={"inputs": formatted_prompt, "parameters": {"max_new_tokens": 100}}
+            json={
+            "inputs": formatted_prompt,
+            "parameters": {
+                "max_new_tokens": max_new_tokens,
+                "stop": ["\n", "."], 
+                "temperature": 0.7,   
+                "top_p": 0.9,         
+                },
+            }
         )
         response.raise_for_status()
         generated_text = response.json()[0]['generated_text']
