@@ -15,6 +15,9 @@ class UserLoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+    roles: List[str]
+    email: str
+    id: int
 
 class UserResponse(BaseModel):
     id: int

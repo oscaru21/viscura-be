@@ -43,22 +43,21 @@ class ContentGenerationService:
         
         self.prompt_template = PromptTemplate(
             template="""
-            You are a social media assistant. Based on the provided context, create an engaging social media post caption.
-
-            Context:
-            {context}
-
-            Image descriptions: 
-            {image_description}
+            You are a social media assistant. Based on the provided [CONTEXT], [IMAGE_CAPTIONS] and [USER_PROMPT], create an engaging social media post caption.
 
             Instructions:
+            - Prioritize user prompt and image descriptions.
             - Write a short, engaging caption suitable for social media.
             - Use a {tone} tone and include at least one emoji.
             - Highlight key details and exciting aspects from the context.
-            - Avoid repetition and highlight the most exciting aspects.
-            - Only return complete sentences or thoughts.
+            
+            [CONTEXT]:
+            {context}
 
-            User Prompt:
+            [IMAGE_CAPTIONS]: 
+            {image_description}
+
+            [USER_PROMPT]:
             {user_prompt}
 
             Caption:
